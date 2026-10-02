@@ -21,6 +21,8 @@
 
 .passage-scene-card{margin:12px 0;padding:10px;background:#102831;border:1px solid #39545e;border-radius:7px}.passage-scene-card>summary{font-weight:600;color:#e1bd7b;line-height:1.5;cursor:pointer}.scene-mode{font-size:11px;letter-spacing:.04em;color:#a7c9d2}.scene-evidence-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 7px;padding:7px 0;border-bottom:1px solid #233e48;font-size:12px;line-height:1.5}.scene-evidence-row strong{width:100%;color:#d8c5a4}.evidence-reference{padding:3px 6px;border:1px solid #49616a;border-radius:4px;background:#183640;color:#e1bd7b;font:inherit;cursor:pointer}.evidence-reference:hover{background:#28515c}.source-phrase{color:#d0dce0}.source-context{width:100%;color:#98b1bb}.reading-details{margin-top:12px}.reading-details summary{cursor:pointer;color:#e1bd7b}.source-reading{font-family:Georgia,serif;font-size:14px;line-height:1.65}.scene-actions{font-size:12px;line-height:1.6}
 
+.composition-evidence{margin:14px 0;padding:10px;border:1px solid #655b42;border-radius:6px;background:#152d32}.composition-evidence h4{margin:0 0 8px;color:#e2c386}.composition-clauses{margin-top:10px}.composition-clauses>summary{cursor:pointer;color:#d3c196}.composition-motif{border-left:2px solid #8d7950;padding-left:8px;transition:background .2s}.composition-focus{background:#67543785;outline:1px solid #e3c77e}.detail-label[aria-label^="Explore "]{max-width:200px}
+
 #walk-hud{position:absolute;inset:0;z-index:4;pointer-events:none}#walk-status{position:absolute;left:20px;bottom:12px;max-width:calc(100% - 40px);padding:6px 10px;border-radius:5px;background:#0a1c28e8;font-size:11px;color:#e6d4b2}#walk-exit,#walk-inspect{position:absolute;right:20px;padding:8px 12px;background:#102831;pointer-events:auto}#walk-exit{bottom:46px}#walk-inspect{bottom:88px}#walk-reticle{position:absolute;top:50%;left:50%;width:9px;height:9px;border:1px solid #eed5a2;border-radius:50%;transform:translate(-50%,-50%)}#walk-pad{position:absolute;left:20px;bottom:45px;display:grid;grid-template-columns:repeat(3,34px);gap:4px;pointer-events:auto}#walk-pad button{height:34px;background:#102831e8;font-size:12px}#walk-pad [data-walk-key=forward]{grid-column:2}#walk-pad [data-walk-key=left]{grid-column:1;grid-row:2}#walk-pad [data-walk-key=back]{grid-column:2;grid-row:2}#walk-pad [data-walk-key=right]{grid-column:3;grid-row:2}#walk-pad [data-walk-key=run]{grid-column:1/4;grid-row:3}.walk-active .story-source{bottom:174px}.walk-active .scene-heading{opacity:.35}
 </style><style>
 #reader,#bookrail{contain:layout paint;isolation:isolate}
@@ -654,14 +656,17 @@ function drawSceneFeature(m,f,style,random,lod=2){
  throw Error('Unsupported scene feature '+t);
 }
 function drawVerseScene(m,plan,style,random,lod=2){
+ const sceneBegin=m.used,origin=m.point([0,0,0]),up=m.point([0,1,0])[1]-origin[1];
  const result={reference:plan.reference,planId:plan.id,mode:plan.mode,title:plan.title,actors:[],props:[],features:[],unmodeled:plan.unmodeled||[]};
  const stage=rgb(['#ac9c7f','#b1a084','#a79b82','#a99d85'][(style.chapter||1)%4]);
- m.box(-7,-.11,-5.2,14,.10,11.5,stage,8);
+ const sideGallery=lod>1&&plan.visualization&&(plan.visualization.kind==='narrative-extension'||plan.authored&&(plan.actors.length||plan.props.length||plan.features.length));
+ result.stageWidth=sideGallery?18:14;
+ m.box(sideGallery?-9:-7,-.11,-5.2,sideGallery?18:14,.10,11.5,stage,8);
  for(const [i,f] of (plan.features||[]).entries()){
   const x=Number.isFinite(f.x)?f.x:0,y=Number.isFinite(f.y)?f.y:0,z=Number.isFinite(f.z)?f.z:(i===0?0:-2.8),scale=f.scale||1,begin=m.used;
   context(m,x,y,z,f.facing||0,scale,()=>drawSceneFeature(m,f,style,random,lod));result.features.push({...f,x,y,z,vertices:(m.used-begin)/11});
  }
- const props=plan.props||[];
+ const props=[...(plan.props||[]),...(plan.supplementaryProps||[])];
  for(const [i,sourceProp] of props.entries()){
   const featureState=sourceProp.type==='tomb'?(plan.features||[]).find(f=>f.type==='cave')?.state:undefined,p=featureState&&!sourceProp.state?{...sourceProp,state:featureState}:sourceProp;
   const requested=Number.isInteger(p.count)&&p.count>0?p.count:1,limit=lod>1?512:12,count=Math.min(requested,limit);
@@ -676,7 +681,12 @@ function drawVerseScene(m,plan,style,random,lod=2){
   context(m,x,y,z,a.facing||0,a.scale||1,()=>{if(present)posedPerson(m,a,style,lod);else {m.box(-.38,.01,-.35,.76,.23,.70,C.stone,8);context(m,0,.25,0,0,.50,()=>sourceObject(m,{type:'scroll'},style,random));}});
   result.actors.push({...a,x,y,z,present,display:present?'posed-person':'name-reference',vertices:(m.used-begin)/11});
  }
- if(!props.length&&!result.actors.length&&!result.features.length)context(m,0,0,0,0,1.4,()=>sourceObject(m,{type:'scroll'},style,random));
+ if(plan.visualization&&typeof drawPassageComposition==='function')result.visualization=drawPassageComposition(m,plan,style,random,lod);
+ let displayHeight=0;for(let k=sceneBegin+1;k<m.used;k+=11)displayHeight=Math.max(displayHeight,(m.v[k]-origin[1])/up);
+ result.displayHeight=displayHeight;
+ if(typeof drawSourceInscription==='function')result.inscription=drawSourceInscription(m,{...plan,displayHeight},style,lod);
+ result.height=Math.max(displayHeight,Number.isFinite(result.inscription?.height)?result.inscription.y+result.inscription.height/2:0);
+ if(!result.visualization&&!props.length&&!result.actors.length&&!result.features.length)context(m,0,0,0,0,1.4,()=>sourceObject(m,{type:'scroll'},style,random));
  return result;
 }
 function passageStopPosition(i){const row=Math.floor(i/40),a=.71+(i%40)*TAU/40,r=27+row*3.7;return {row,a,x:Math.cos(a)*r,z:Math.sin(a)*r};}
@@ -699,9 +709,16 @@ function buildPassageTrail(m,moment,main,terrain,style,random){
  for(let i=1;i<placed.length;i++){const p=placed[i-1],q=placed[i];if(Math.hypot(p[0]-q[0],p[2]-q[2])<8)road(m,p,q,terrain,style,1.12);}
  if(moment.scene.grain==='verse')for(const [i,p] of (moment.scene.selectedPlans||[]).entries()){
   const x=main.x,z=main.z+i*14,y=main.y+.18,id=200000+moment.scene.sourceDetails[i].verse;m.id=id;let instance;
-  terrain.height.walkSurfaces?.push({kind:'rect',x,z:z+.55,width:14,depth:11.5,y:y-.01});
   context(m,x,y,z,0,1,()=>{instance=drawVerseScene(m,p,{...style,region:p.region||style.region},random,2);});
+  terrain.height.walkSurfaces?.push({kind:'rect',x,z:z+.55,width:instance.stageWidth||14,depth:11.5,y:y-.01});
   sceneInstances.push({...instance,x,y,z,verse:moment.scene.sourceDetails[i].verse,ordinal:moment.scene.sourceDetails[i].ordinal,display:'selected-verse'});
+  for(const [j,c] of (instance.visualization?.components||[]).entries())if(c.labelPosition&&c.evidence?.length&&!['genre-environment','source-clause','clause-sequence','source-relation'].includes(c.type)){
+   const [cx,cy,cz]=c.labelPosition;
+   detailNodes.push({id:210000+p.verse*40+j,kind:'illustration',book:p.book,chapter:p.chapter,verse:p.verse,reference:p.reference,recordId:p.id+':'+c.type,concept:c.type,label:c.type.replace(/[-_]/g,' ')+' · '+(c.label||'source')+(c.assertion&&c.assertion!=='asserted'?' · '+c.assertion:''),evidence:c.evidence,illustrative:true,x:x+cx,y:y+cy+.30,z:z+cz});
+  }
+  for(const [j,c] of (instance.visualization?.components||[]).filter(c=>c.type==='source-relation').entries()){
+   const a=c.labelPositions[0],b=c.labelPositions[1];detailNodes.push({id:230000+p.verse*10+j,kind:'illustration',book:p.book,chapter:p.chapter,verse:p.verse,reference:p.reference,recordId:p.id+':relation:'+j,concept:'relation:'+j,label:c.endpoints.join(' → '),evidence:c.evidence,illustrative:true,x:x+(a[0]+b[0])/2,y:y+a[1]+.35,z:z+a[2]});
+  }
   for(const o of moment.scene.sourceDetails[i].objects)sourceObjects.push({...o,reference:p.reference,verse:moment.scene.sourceDetails[i].verse,ordinal:moment.scene.sourceDetails[i].ordinal,x,y,z,display:'selected-verse'});
   if(i===0&&placed.length){const start=[x+6.9,y-.01,z+4.8],nearest=placed.reduce((best,q)=>Math.hypot(q[0]-start[0],q[2]-start[2])<Math.hypot(best[0]-start[0],best[2]-start[2])?q:best,placed[0]),height=(xx,zz)=>{const deck=walkSurfaceHeight(terrain.height.walkSurfaces,xx,zz);return deck===null?terrain.height(xx,zz):Math.max(deck,terrain.height(xx,zz));};height.walkSurfaces=terrain.height.walkSurfaces;m.id=0;road(m,start,nearest,{...terrain,height},style,1.12);}
  }
@@ -786,6 +803,7 @@ function sourceJar(m,type,object={},lod=2){
 function sourceBird(m,type){const color=type==='raven'?rgb('#42464a'):type==='eagle'?rgb('#816d55'):C.pale;m.dome(0,.08,0,.27,.17,color,10,4,13);m.dome(0,.30,.23,.105,.13,color,8,3,13);m.triangle([-.055,.27,.30],[.055,.27,.30],[0,.24,.42],C.gold,8);for(const side of [-1,1]){m.triangle([side*.1,.16,0],[side*.7,.38,-.28],[side*.55,.07,.14],color,13);m.triangle([side*.12,.16,-.03],[side*.65,.08,-.36],[side*.29,.07,-.31],color,13);}m.triangle([-.12,.1,-.2],[.12,.1,-.2],[0,.05,-.53],color,13);}
 function sourceObject(m,object,style,random,lod=2){
  const t=object.type,old=m.id;const st=style.stone||C.stone;
+ if(typeof drawExpandedObject==='function'&&drawExpandedObject(m,object,style,random,lod))return;
  if(t==='city'){
   // One bounded settlement miniature is one counted city, at either trail scale.
   context(m,0,0,0,0,.11,()=>drawSceneFeature(m,{type:'city',state:object.state||'present'},style,random,lod));
@@ -926,6 +944,429 @@ function authoredEpisode(m,moment,main,terrain,style,random){
  if(episode.id==='new-jerusalem'||episode.id==='life-river')add('Twelve pearl gates, foundations and the river of life imagery',()=>{m.ribbon([-9,.04,5],[9,.04,5],2.2,C.water,3);for(let i=0;i<12;i++)m.dome(-8+i*1.45,.22,8,.33,.36,C.pale,10,4,10);for(const x of [-5,5])tree(m,x,0,2,2.4,random,'olive');});
  if(episode.id==='jacob-ladder')add('Jacob’s ladder, resting stone and skyward path',()=>{context(m,0,0,-2,0,4.3,()=>sourceObject(m,{type:'ladder'},style,random));boulder(m,-3,.05,5,1,.65,C.pale,38);for(let i=0;i<9;i++)m.glows.push(...m.point([Math.sin(i)*2,3+i*.7,-2]),1,.72,.40,.9);});
  return props;
+}
+
+// Modern source-linked illustrations. Self-contained inside createStoryGeometry / worker.
+// No participant or quantity is reconstructed by this layer.
+function compositionEvidence(item,plan){
+ const e=item&&item.evidence;if(Array.isArray(e)&&e.length)return e;if(e&&e.phrase)return [e];
+ const phrase=item&&(item.phrase||item.text);if(phrase)return [{phrase,offset:item.offset||0,reference:plan.reference}];
+ const text=plan.text||plan.sourceText||'';return text?[{phrase:text,offset:0,reference:plan.reference}]:[];
+}
+function compositionStroke(m,a,b,w,color){
+ const dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1,px=-dy/l*w/2,py=dx/l*w/2;
+ m.quad([a[0]+px,a[1]+py,a[2]],[a[0]-px,a[1]-py,a[2]],[b[0]-px,b[1]-py,b[2]],[b[0]+px,b[1]+py,b[2]],color,8);
+}
+function compositionModel(m,type,stone,lod){
+ const full=lod>1,s=full?8:5,gold=C.gold,dark=C.dark,pale=mix(stone,C.pale,.55),green=rgb('#69816b'),blue=rgb('#78949b'),clay=rgb('#a78268');
+ const box=(x,y,z,w,h,d,c=stone)=>m.box(x,y,z,w,h,d,c,8);
+ const tube=(a,b,r=.055,c=stone)=>poseTube(m,a,b,r,r,c,8,0);
+ const cone=(x,y,z,r,h,c=stone,top=.02)=>m.cylinder(x,y,z,r,h,c,s,top,8);
+ const dome=(x,y,z,r,h,c=stone)=>m.dome(x,y,z,r,h,c,s,full?3:2,8);
+ const loop=(x,y,z,r,c=stone,start=0,end=Math.PI*2)=>{const n=full?12:7;for(let i=0;i<n;i++){const a=start+(end-start)*i/n,b=start+(end-start)*(i+1)/n;tube([x+Math.cos(a)*r,y+Math.sin(a)*r,z],[x+Math.cos(b)*r,y+Math.sin(b)*r,z],.045,c);}};
+ const leaf=(x,y,z,side=1,c=green)=>{m.triangle([x,y,z],[x+side*.33,y+.20,z+.05],[x+side*.13,y+.30,z],c,8);m.triangle([x,y,z],[x+side*.13,y+.30,z],[x+side*.33,y+.20,z-.05],c,8);};
+ const branch=(x=0,y=.12,z=0,height=1.2,c=green)=>{tube([x,y,z],[x,y+height,z],.05,stone);for(let i=0;i<(full?5:3);i++)leaf(x,y+height*(i+.3)/(full?5:3),z,i%2?-1:1,c);};
+ const figure=(x,z,pose='standing',height=1.2)=>{ // Faceted all-stone maquette, no skin, costume, name or actor record.
+  const kneel=pose==='kneeling',lie=pose==='lying',h=height*(kneel?.65:1),headY=lie?.31:h*.84;
+  if(lie){box(x-.42,.13,z-.14,.84,.22,.28);dome(x-.46,.30,z,.16,.12);return;}
+  cone(x,.08,z,.18,h*.62,stone,.11);dome(x,headY,z,.14,h*.17,pale);
+  for(const side of [-1,1]){const a=[x+side*.14,h*.63,z],b=[x+side*.30,pose==='reaching'?h*.94:h*.38,z+.13];tube(a,b,.06,stone);}
+  if(!kneel)for(const side of [-1,1])box(x+side*.09-.045,.02,z-.055,.09,h*.25,.16);
+ };
+ const stairs=(n=4,dir=1)=>{for(let i=0;i<n;i++)box(-.7+i*.30,.02,-.32,.30,.17+(dir===1?i:n-i)*.18,.64,pale);};
+ const balance=(tilt=0)=>{cone(0,.02,0,.12,1.5);tube([-.65,1.30-tilt,0],[.65,1.30+tilt,0],.05,gold);for(const side of [-1,1]){const y=1.30+side*tilt;tube([side*.55,y,0],[side*.55,y-.40,0],.022,gold);cone(side*.55,y-.55,0,.27,.12,pale,.32);}};
+ const pages=(n=3)=>{for(let i=0;i<n;i++)box(-.55+i*.075,.18+i*.08,-.37,.95,.07,.70,pale);};
+ const wave=(height=.1,n=3)=>{for(let i=0;i<n;i++)for(let j=0;j<5;j++)m.ribbon([-.7+j*.28,.06+Math.sin(j*1.4+i)*height,-.4+i*.33],[-.7+(j+1)*.28,.06+Math.sin((j+1)*1.4+i)*height,-.4+i*.33],.12,blue,8);};
+ const rays=(n=7)=>{dome(0,.20,0,.30,.38,gold);for(let i=0;i<n;i++){const a=i*Math.PI*2/n;tube([Math.cos(a)*.36,.35,Math.sin(a)*.36],[Math.cos(a)*.74,.7,Math.sin(a)*.74],.035,gold);}};
+ switch(type){
+ case 'compassion': figure(-.37,0,'kneeling');figure(.34,.08,'lying');loop(.06,1.10,.12,.64,pale,0,Math.PI);break;
+ case 'patience': cone(0,.05,0,.44,.70,pale,.045);cone(0,.75,0,.045,.70,pale,.44);box(-.53,.02,-.50,1.06,.06,1.0);box(-.53,1.45,-.50,1.06,.06,1.0);break;
+ case 'justice': balance();break;
+ case 'peace': wave(.025,2);branch(0,.1,0,.95);break;
+ case 'faith': box(-.60,.02,-.32,1.2,.2,.64);loop(0,.50,0,.66,pale,0,Math.PI);tube([0,.25,0],[0,1.15,0],.10);break;
+ case 'hope': stairs(4);rays(3);break;
+ case 'love': dome(-.24,.62,0,.31,.37,clay);dome(.24,.62,0,.31,.37,clay);m.triangle([-.54,.65,.03],[.54,.65,.03],[0,.08,.03],clay,8);m.triangle([-.54,.65,-.03],[0,.08,-.03],[.54,.65,-.03],clay,8);break;
+ case 'wisdom': pages(4);branch(.32,.48,.04,.80,gold);break;
+ case 'truth': box(-.48,.04,-.10,.96,1.4,.20,pale);compositionStroke(m,[-.31,.7,.12],[-.06,.45,.12],.08,gold);compositionStroke(m,[-.06,.45,.12],[.36,1.10,.12],.08,gold);break;
+ case 'falsehood': box(-.6,.04,-.1,.50,1.35,.20,dark);box(.04,.04,-.08,.5,1.05,.20,clay);tube([-.1,1.35,.13],[.06,.64,.13],.035,pale);break;
+ case 'fear': figure(0,0,'kneeling');for(const side of [-1,1])cone(side*.48,.03,-.2,.24,1.2,dark);break;
+ case 'comfort': figure(0,0,'seated',.9);loop(0,.54,-.05,.68,pale,0,Math.PI);box(-.70,.05,-.23,1.40,.12,.58);break;
+ case 'joy': figure(0,0,'reaching');for(const x of [-.5,.5])dome(x,.42,.05,.2,.31,gold);break;
+ case 'grief': figure(0,0,'kneeling',1.0);cone(.45,.03,.1,.17,.4,blue);cone(-.45,.03,.1,.12,.28,blue);break;
+ case 'repentance': m.ribbon([-.65,.04,.35],[.65,.04,.35],.15,clay,8);loop(0,.45,0,.43,gold,Math.PI*.2,Math.PI*1.6);m.triangle([-.38,.15,.04],[-.18,.2,.04],[-.33,.4,.04],gold,8);break;
+ case 'forgiveness': loop(-.31,.46,0,.31);loop(.33,.46,0,.31);tube([-.2,.77,.05],[.37,1.19,.05],.06,gold);break;
+ case 'obedience': stairs(3);figure(.36,.08,'standing',.75);break;
+ case 'rebellion': stairs(3,-1);box(.50,.20,-.32,.20,1.3,.64,dark);break;
+ case 'life': branch(0,.06,0,1.45);dome(0,1.36,0,.4,.35,green);break;
+ case 'death': box(-.54,.03,-.3,1.08,.24,.6,dark);branch(0,.30,0,.80,dark);break;
+ case 'light': rays(8);break;
+ case 'darkness': cone(0,.02,0,.70,.80,dark,.32);box(-.17,.82,-.15,.34,.30,.30,dark);break;
+ case 'path': for(let i=0;i<5;i++)box(-.6+i*.25,.03,Math.sin(i*.8)*.35-.10,.20,.09,.23,pale);break;
+ case 'choice': m.ribbon([0,.04,.5],[0,.04,0],.20,pale,8);for(const side of [-1,1]){m.ribbon([0,.04,0],[side*.64,.04,-.5],.2,side===1?gold:dark,8);cone(side*.64,.05,-.5,.12,.45);}break;
+ case 'unity': for(const x of [-.48,0,.48])cone(x,.03,0,.14,1.0);tube([-.62,.9,0],[.62,.9,0],.09,gold);break;
+ case 'division': for(const x of [-.55,.55])cone(x,.03,0,.2,1.20);box(-.12,.02,-.38,.24,.16,.76,dark);break;
+ case 'humility': figure(0,0,'kneeling',.95);box(-.6,.015,-.35,1.2,.05,.7);break;
+ case 'pride': stairs(2);cone(0,.12,0,.40,1.65,pale,.17);loop(0,1.9,0,.22,gold,0,Math.PI);break;
+ case 'service': figure(-.30,0,'kneeling');cone(.35,.15,.10,.37,.18,pale,.4);break;
+ case 'provision': cone(0,.05,0,.54,.3,pale,.64);for(const x of [-.3,0,.3])dome(x,.33,0,.16,.19,gold);break;
+ case 'poverty': cone(0,.06,0,.28,.12,clay,.41);box(-.65,.03,.17,.30,.055,.38);break;
+ case 'wealth': for(let i=0;i<3;i++)cone((i-1)*.4,.03,0,.22,.38+i*.15,gold,.22);break;
+ case 'covenant': for(const x of [-.32,.32])box(x-.26,.02,-.13,.52,.80,.26,pale);loop(0,.92,0,.52,gold,0,Math.PI);break;
+ case 'promise': box(-.55,.02,-.26,1.10,.44,.52);tube([-.4,.50,0],[.40,.50,0],.05,gold);dome(.40,.5,0,.15,.48,gold);break;
+ case 'judgment': balance(.20);box(-.30,.02,.28,.6,.10,.40,dark);break;
+ case 'deliverance': for(const x of [-.6,.6])box(x-.075,.02,-.1,.15,1.50,.2);box(-.6,1.5,-.1,1.2,.16,.2);m.ribbon([0,.04,.65],[0,.04,-.52],.34,gold,8);break;
+ case 'bondage': for(const x of [-.45,0,.45])loop(x,.38,0,.23,dark);box(-.7,.02,-.28,1.4,.13,.56);break;
+ case 'freedom': loop(-.38,.40,0,.25,gold,Math.PI*.2,Math.PI*1.6);loop(.38,.62,0,.25,gold,-Math.PI*.6,Math.PI*.8);branch(0,.02,.14,.65);break;
+ case 'worship': figure(0,0,'kneeling');rays(4);break;
+ case 'prayer': figure(-.15,0,'kneeling',1.20);tube([-.05,.7,.24],[.25,1.2,.24],.07,pale);break;
+ case 'praise': figure(0,0,'reaching',1.30);for(const x of [-.58,.58])cone(x,.03,0,.15,.3,gold,.01);break;
+ case 'hearing': loop(0,.74,0,.48,pale,-Math.PI*.6,Math.PI*.8);loop(.05,.73,.03,.25,gold,Math.PI*.3,Math.PI*1.5);break;
+ case 'speech': cone(-.35,.05,0,.2,.95);for(let i=0;i<3;i++)loop(.16+i*.17,.85,0,.16+i*.10,gold,-.65,.65);break;
+ case 'silence': box(-.45,.16,-.12,.90,.60,.24);compositionStroke(m,[-.6,1.13,.15],[.6,.1,.15],.08,dark);break;
+ case 'purity': cone(0,.03,0,.45,.16,pale,.65);dome(0,.21,0,.22,.48,blue);break;
+ case 'pollution': cone(0,.03,0,.48,.16,dark,.65);for(const x of [-.36,0,.36])dome(x,.20,.08,.13,.25,clay);break;
+ case 'sacrifice': box(-.50,.03,-.36,1,.32,.72);for(const x of [-.27,0,.27])cone(x,.35,0,.1,.50,clay,.01);break;
+ case 'instruction': pages(2);box(-.65,.02,-.43,.12,1.3,.13);tube([-.58,1.32,0],[.50,.5,0],.04,gold);break;
+ case 'blessing': branch(0,.04,0,1.15,gold);for(const x of [-.5,.5])dome(x,.1,.08,.18,.28,green);break;
+ case 'curse': branch(0,.05,0,1.1,dark);for(const side of [-1,1])tube([side*.25,.64,0],[side*.50,.28,0],.05,dark);break;
+ case 'strength': for(const x of [-.4,.4])cone(x,.02,0,.24,1.3,pale,.24);box(-.66,1.3,-.22,1.32,.22,.44);break;
+ case 'weakness': cone(-.40,.02,0,.16,.75);box(.15,.03,-.25,.47,.16,.5);tube([-.34,.75,0],[.35,.2,0],.07);break;
+ case 'protection': box(-.63,.02,-.15,.16,1.25,.3);box(.47,.02,-.15,.16,1.25,.3);loop(0,1.22,0,.55,pale,0,Math.PI);figure(0,.06,'kneeling',.7);break;
+ case 'danger': for(const x of [-.50,0,.50])cone(x,.02,0,.19,1.25-Math.abs(x),clay);break;
+ case 'journey': for(let i=0;i<4;i++)box(-.7+i*.42,.02,-.25+i*.15,.28,.12,.28);tube([.62,.04,.3],[.62,1.35,.3],.05);break;
+ case 'rest': box(-.58,.04,-.34,1.16,.22,.68,pale);figure(0,.03,'lying',.8);break;
+ case 'labor': figure(-.31,-.03,'standing',1.1);tube([-.23,.75,.15],[.62,.15,.15],.075);box(.27,.04,-.18,.5,.18,.5);break;
+ case 'harvest': for(const x of [-.3,0,.3])branch(x,.03,0,.95,gold);tube([-.45,.6,0],[.45,.6,0],.045,clay);break;
+ case 'growth': for(let i=0;i<3;i++)branch((i-1)*.42,.03,0,.45+i*.40,green);break;
+ case 'time': loop(0,.78,0,.62,gold);tube([0,.78,.04],[0,1.18,.04],.05);tube([0,.78,.04],[.3,.58,.04],.05);break;
+ case 'memory': pages(3);loop(0,.88,0,.48,pale,0,Math.PI*1.6);break;
+ case 'inheritance': box(-.55,.02,-.4,1.1,.45,.8);branch(0,.50,0,.90,gold);break;
+ case 'family': for(const [x,h] of [[-.42,1.15],[.42,1.1],[0,.64]])figure(x,0,'standing',h);break;
+ case 'authority': box(-.45,.02,-.28,.9,.3,.56);box(-.45,.32,-.28,.9,1.0,.12);for(const x of [-.5,.5])box(x-.07,.3,-.13,.14,.45,.45);break;
+ case 'battle': tube([-.58,.04,0],[.58,1.3,0],.075,dark);tube([.58,.04,.07],[-.58,1.3,.07],.075,gold);break;
+ case 'sickness': figure(0,0,'lying');dome(.4,.45,-.08,.18,.20,clay);break;
+ case 'healing': figure(-.34,0,'lying');branch(.4,.04,0,1.05,green);break;
+ case 'hospitality': box(-.6,.56,-.36,1.2,.10,.72);for(const x of [-.48,.48])for(const z of [-.26,.26])box(x,.02,z,.09,.54,.09);dome(0,.66,0,.25,.18,gold);break;
+ case 'word': pages(1);for(let i=0;i<3;i++)box(-.34,.28+i*.13,.37,.7,.035,.02,gold);break;
+ case 'knowledge': pages(5);loop(.03,.95,0,.35,gold);tube([.30,.70,0],[.58,.3,0],.07,gold);break;
+ case 'name': box(-.65,.02,-.16,1.30,.74,.32,pale);for(let i=0;i<4;i++)box(-.40+i*.23,.30,.18,.12,.14,.02,gold);break;
+ case 'lament': figure(-.1,0,'kneeling',1.1);for(let i=0;i<3;i++)m.ribbon([-.7,.07,-.45+i*.40],[.70,.07,-.45+i*.40],.06,blue,8);break;
+ case 'watchfulness': cone(0,.02,0,.42,1.18,pale,.28);loop(0,1.45,.02,.34,gold,0,Math.PI);dome(0,1.27,.03,.14,.20,dark);break;
+ case 'creation': cone(0,.02,0,.62,.12,blue,.62);branch(-.22,.16,0,.90,green);dome(.35,.9,0,.20,.25,gold);break;
+ default: // A visibly modern abstract reading sculpture, never a purported source artifact.
+  for(let i=0;i<3;i++)box(-.55+i*.35,.02,-.2,.25,.40+i*.32,.40,pale);tube([-.55,.55,.08],[.55,1.28,.08],.06,gold);
+ }
+}
+function compositionEnvironment(m,kind,stone,lod){
+ const full=lod>1,pale=mix(stone,C.pale,.4),gold=C.gold;
+ if(kind==='narrative-extension'){m.box(-5.7,.025,-4.94,11.4,.08,.10,pale,8);return;}
+ const column=(x,z,h=2)=>{m.cylinder(x,.025,z,.17,h,stone,full?8:5,.15,8);m.box(x-.26,h,z-.26,.52,.10,.52,pale,8);};
+ if(kind==='teaching-exhibit'){
+  for(let i=0;i<(full?3:1);i++){const r=3.6+i*.5;for(let j=0;j<(full?8:4);j++){const a=Math.PI+(j+.5)*Math.PI/(full?8:4);context(m,Math.cos(a)*r,.02+i*.15,Math.sin(a)*r,Math.PI/2-a,1,()=>m.box(-.6,0,-.18,1.2,.20,.36,pale,8));}}
+ }else if(kind==='poetic-landscape'){
+  for(let i=0;i<(full?7:3);i++)m.ribbon([-5.4+i*1.55,.035,-3.50+Math.sin(i)*.45],[-5.4+(i+1)*1.55,.035,-3.50+Math.sin(i+1)*.45],.4,rgb('#7a9393'),8);
+  for(const x of [-5.8,5.8]){m.cylinder(x,.02,-2.7,.8,.17,stone,6,.8,8);context(m,x,.20,-2.7,0,.95,()=>compositionModel(m,'growth',stone,0));}
+ }else if(kind==='family-register'){
+  m.box(-5.8,.025,-4.5,11.6,.18,.72,pale,8);for(let i=0;i<(full?6:2);i++){const x=-4.6+i*(full?1.85:9.2);column(x,-4.15,1.7);m.box(x-.55,1.4,-4.27,1.1,.65,.12,pale,8);}m.box(-5.5,.95,-4.32,11,.07,.09,gold,8);
+ }else if(kind==='letter-chamber'){
+  for(const x of [-5.8,5.8]){column(x,-3.8,2.4);m.box(x-.4,.03,-2.4,.8,.40,2.1,stone,8);}
+  m.box(-2.4,.72,-4.0,4.8,.16,1.1,pale,8);for(const x of [-2.15,2.15])m.box(x,.02,-3.9,.16,.7,.85,stone,8);
+  m.quad([-.8,.90,-3.9],[.8,.9,-3.9],[.8,1.18,-3.4],[-.8,1.18,-3.4],C.pale,8);
+ }else if(kind==='law-workshop'){
+  for(const x of [-4.6,4.6]){m.box(x-1,.6,-3.6,2,.20,1.5,pale,8);for(const dx of [-.8,.7])m.box(x+dx,.02,-3.5,.13,.58,1.25,stone,8);}
+  for(let i=0;i<(full?5:2);i++){m.ribbon([-5.8,.04,-.7+i*.5],[5.8,.04,-.7+i*.5],.025,gold,8);}column(0,-4.3,2.1);
+ }else if(kind==='vision-chamber'){
+  for(const x of [-5.4,5.4])column(x,-3.4,2.8);
+  for(let i=0;i<(full?14:6);i++){const a=Math.PI*i/(full?14:6),b=Math.PI*(i+1)/(full?14:6);poseTube(m,[Math.cos(a)*4.5,1+Math.sin(a)*2.5,-4.4],[Math.cos(b)*4.5,1+Math.sin(b)*2.5,-4.4],.12,.12,gold,8,0);}
+ }else if(kind==='prophecy-chamber'){
+  for(let i=0;i<(full?5:2);i++)m.cylinder(-5.6+i*(full?2.8:11.2),.02,-4.2,.7,.7+(i%3)*.48,stone,5,.08,8);
+  m.ribbon([-5.6,.04,-2.8],[5.6,.04,-2.8],.14,gold,8);for(const x of [-5.5,5.5])column(x,-1.8,1.2);
+ }else {
+  for(let i=0;i<(full?3:1);i++)m.box(-3.9+i*.25,.02+i*.24,-4.5+i*.16,7.8-i*.5,.22,.8,pale,8);
+  for(const x of [-5.3,5.3])column(x,-3.9,2.0);m.box(-5.5,2.03,-4.13,11,.13,.46,stone,8);
+ }
+}
+function drawPassageComposition(m,plan,style,random,lod=2){
+ const visual=plan.visualization||{},kind=visual.kind||'source-chamber',clauses=visual.clauses||[],relations=visual.relations||[],motifs=visual.motifs||[],stone=mix(style.stone||C.stone,C.pale,.65),full=lod>1;
+ // Source events always retain the open central stage; literary displays can occupy it.
+ const occupied=kind==='narrative-extension'||(plan.authored&&((plan.actors||[]).length||(plan.props||[]).length||(plan.features||[]).length));
+ const result={kind,components:[],clauses,relations,interpretive:true,method:visual.method||'modern-source-illustration'};
+ const fallback=compositionEvidence(clauses[0]||motifs[0],plan),evidence=fallback.length?fallback:(motifs.find(t=>compositionEvidence(t,plan).length)?.evidence||[]);
+ const component=(type,item,fn,extra={})=>{const begin=m.used;fn();const vertices=(m.used-begin)/11;if(vertices)result.components.push({type,illustrative:true,interpretive:true,material:'carved-stone-illustration',evidence:compositionEvidence(item,plan).length?compositionEvidence(item,plan):evidence,vertices,...extra});};
+ component('genre-environment',{evidence},()=>compositionEnvironment(m,occupied?'narrative-extension':kind,stone,lod),{genre:kind,display:'modern-illustrative-environment'});
+ // Deduplicate repeated semantic types before choosing the bounded display subset.
+ const chosen=[],seen=new Set(),limit=full?(occupied?6:8):(occupied?1:2);
+ for(const motif of motifs){if(seen.has(motif.type))continue;seen.add(motif.type);chosen.push(motif);if(chosen.length===limit)break;}
+ if(!chosen.length)chosen.push({type:'source-meaning',label:'Source reading',evidence,assertion:'illustrative'});
+ for(let i=0;i<chosen.length;i++){
+  const motif=chosen[i],x=occupied?(i%2?1:-1)*(full?8.0:6.2):(chosen.length===1?0:(i%4-1.5)*3.0),z=occupied?-3.4+Math.floor(i/2)*2.7:(chosen.length<=4?.8:Math.floor(i/4)*2.65-1.35),scale=occupied?(full?.85:.40):(full?1.25:.77),assertion=motif.assertion||'asserted';
+  component(motif.type,motif,()=>context(m,x,.035,z,0,scale,()=>{
+   if(full){m.box(-.94,0,-.79,1.88,.24,1.58,C.pale,4);m.box(-1,.24,-.84,2,.035,1.68,C.gold,2);}
+   const start=m.used;context(m,0,full?.275:0,0,0,1,()=>compositionModel(m,motif.type,stone,lod));
+   // Bright untextured relief keeps its silhouette distinct from the surrounding stone floor.
+   for(let k=start;k<m.used;k+=11)if(m.v[k+9]===8)m.v[k+9]=4;
+   const markerLift=full?.275:0;
+   if(assertion==='negated'){compositionStroke(m,[-.80,.10+markerLift,.43],[.80,1.65+markerLift,.43],.09,rgb('#87584e'));}
+   if(assertion==='command'||assertion==='instruction'||assertion==='imperative'){m.box(-.76,.02+markerLift,-.55,1.52,.04,.07,C.gold,0);m.triangle([-.76,.07+markerLift,-.45],[-.53,.07+markerLift,-.32],[-.53,.07+markerLift,-.58],C.gold,0);}
+  }),{label:motif.label||motif.type,assertion,display:assertion==='negated'?'negated-illustration':['command','instruction','imperative'].includes(assertion)?'instruction-illustration':'modern-illustration',x,y:.035,z,scale,labelPosition:[x,full?-.12:.06,z+(full?1.65:.95)*scale]});
+ }
+ // Complete clauses stay in metadata; a bounded ordered set becomes engraved source panels.
+ const displayClauses=clauses.slice(0,full?(occupied?3:4):1),panelPositions=[];
+ for(let i=0;i<displayClauses.length;i++){
+  const c=displayClauses[i],side=i%2?1:-1,x=occupied?side*(full?8.0:6.2):(i-(displayClauses.length-1)/2)*2.5,z=occupied?-3.4+Math.floor(i/2)*2.7:-4.75,y=occupied?(full?2.2:.75):.32,p=[x,y+.4,z+.12],panelScale=occupied?.68:1;panelPositions.push(p);
+  component('source-clause',c,()=>context(m,x,y,z,0,panelScale,()=>{m.box(-1.08,0,0,2.16,.75,.10,mix(stone,C.pale,.60),0);if(full&&typeof reliefSourceLetters==='function'){const phrase=c.phrase||c.text||'',excerpt=phrase.length>42?phrase.slice(0,39)+'...':phrase,lines=sourceInscriptionLines(excerpt,21);for(const [j,line] of lines.entries())reliefSourceLetters(m,line,-.92,.59-j*.20,.108,.014,rgb('#59442b'));}else if(full){for(let j=0;j<Math.min(6,1+Math.floor((c.phrase||c.text||'').length/18));j++)m.box(-.85,.59-j*.085,.106,1.68,.014,.009,C.gold,0);}}), {clauseId:c.id,phrase:c.phrase||c.text||'',offset:c.offset||0,display:'source-clause-panel',excerpt:true,labelPosition:p});
+ }
+ for(let i=1;i<panelPositions.length&&!occupied;i++){
+  const a=panelPositions[i-1],b=panelPositions[i];component('clause-sequence',displayClauses[i],()=>{m.ribbon([a[0]+1.09,a[1]-.50,a[2]],[b[0]-1.09,b[1]-.50,b[2]],.07,C.gold,8);m.triangle([b[0]-1.08,b[1]-.50,b[2]],[b[0]-1.24,b[1]-.50,b[2]-.10],[b[0]-1.24,b[1]-.50,b[2]+.10],C.gold,8);},{from:displayClauses[i-1].id,to:displayClauses[i].id,display:'reading-order'});
+ }
+ // Explicit source relation edges link name plaques, never human source actors.
+ const displayRelations=relations.slice(0,full?(occupied?2:4):1);
+ for(let i=0;i<displayRelations.length;i++){
+  const relation=displayRelations[i],from=typeof relation.from==='object'?relation.from.name:relation.from,to=typeof relation.to==='object'?relation.to.name:relation.to,x=(i%2?1:-1)*(occupied?(full?7.8:6.2):2.75),y=occupied?(full?2.7:1.05):1.3+Math.floor(i/2)*.66,z=occupied?2.3:-3.90;
+  component('source-relation',relation,()=>{
+   for(const side of [-1,1])m.box(x+side*.68-.45,y,z,.90,.44,.10,mix(stone,C.pale,.65),0);
+   if(full&&typeof reliefSourceLetters==='function'){for(const [side,name] of [[-1,String(from||'')],[1,String(to||'')]]){const unit=Math.min(.032,.78/(Math.max(1,name.length)*6));reliefSourceLetters(m,name,x+side*.68-name.length*3*unit,y+.34,z+.108,unit,rgb('#584229'));}}
+   compositionStroke(m,[x-.21,y+.22,z+.115],[x+.21,y+.22,z+.115],.035,C.gold);
+   m.triangle([x+.23,y+.22,z+.116],[x+.10,y+.31,z+.116],[x+.10,y+.13,z+.116],C.gold,8);
+  },{relationship:relation.type,label:relation.label||relation.type,endpoints:[from,to],namesInscribed:full&&typeof reliefSourceLetters==='function',assertion:relation.assertion||'asserted',display:'explicit-source-relation',labelPositions:[[x-.68,y+.20,z+.12],[x+.68,y+.20,z+.12]]});
+ }
+ return result;
+}
+
+// Unit primitives for additional exact-source tangible nouns. This module is
+// injected inside createStoryGeometry and travels unchanged to its offline worker.
+// Each call draws one source unit; count expansion belongs to drawVerseScene.
+function drawExpandedObject(m,o,style,random,lod=2){
+ const t=o.type,wood=C.wood,stone=style.stone||C.stone,metal=o.material==='gold'?C.gold:rgb('#8a8f83'),clay=rgb('#a67d5d'),cloth=rgb('#bda986'),green=rgb('#68884c'),sides=lod>1?14:8;
+ const sphere=(x,y,z,rx,ry,rz,col,mat=13)=>sceneSphere(m,x,y,z,rx,ry,rz,col,mat,lod);
+ const tube=(a,b,r,col=metal,tip=r,mat=2)=>poseTube(m,a,b,r,tip,col,mat,lod);
+ // Plane-selectable open arcs give handles, hook ends and wheel rims a real void.
+ const arc=(x,y,z,r,a,b,plane,col=metal,width=.025)=>{const n=lod>1?14:8,point=q=>plane==='xy'?[x+r*Math.cos(q),y+r*Math.sin(q),z]:plane==='yz'?[x,y+r*Math.cos(q),z+r*Math.sin(q)]:[x+r*Math.cos(q),y,z+r*Math.sin(q)];for(let i=0;i<n;i++)tube(point(a+(b-a)*i/n),point(a+(b-a)*(i+1)/n),width,col,width,col===wood?9:2);};
+ const handle=(a,b,r=.04)=>tube(a,b,r,wood,r,9);
+ if(t==='oven'){
+  m.cylinder(0,0,0,.70,.72,clay,sides,.63,8);m.dome(0,.70,0,.64,.35,clay,sides,lod>1?5:3,8);
+  m.box(-.26,.03,.628,.52,.43,.03,C.dark,8);for(const x of [-.33,.26])m.box(x,.02,.61,.07,.47,.10,stone,8);m.box(-.33,.47,.61,.66,.08,.10,stone,8);return true;
+ }
+ if(t==='kneading-trough'){
+  m.box(-.62,.04,-.35,1.24,.09,.70,wood,9);for(const z of [-.40,.32])m.box(-.70,.12,z,1.40,.34,.08,wood,9);for(const x of [-.70,.62])m.box(x,.12,-.32,.08,.34,.64,wood,9);return true;
+ }
+ if(t==='sack'||t==='scrip'){
+  const small=t==='scrip',w=small?.25:.40,h=small?.30:.55;
+  sphere(0,h,0,w,h,.23,cloth);m.ring(0,h*1.83,0,w*.42,w*.26,cloth,13,sides);tube([-.11,h*1.72,.16],[.11,h*1.72,.16],.020,wood,.020,9);
+  if(small){arc(0,.56,0,.32,0,Math.PI,'xy',wood,.022);m.quad([-.22,.55,.12],[.22,.55,.12],[.20,.35,.25],[-.20,.35,.25],mix(cloth,wood,.2),13);}else for(const x of [-.22,0,.22])tube([x,.16,.20],[x*.6,.88,.16],.009,mix(cloth,wood,.25),.009,13);return true;
+ }
+ if(t==='door'){
+  for(let i=0;i<5;i++)m.box(-.50+i*.20,.03,-.045,.19,1.68,.09,wood,9);
+  for(const y of [.24,1.37])m.box(-.48,y,.048,.96,.075,.035,metal,2);sphere(.31,.85,.11,.045,.045,.04,metal,2);return true;
+ }
+ if(t==='window'||t==='lattice'){
+  const w=t==='window'?.76:1.02,h=t==='window'?1.12:.90;
+  for(const x of [-w/2,w/2-.09])m.box(x,0,-.06,.09,h,.12,wood,9);for(const y of [0,h-.09])m.box(-w/2,y,-.06,w,.09,.12,wood,9);
+  if(t==='window'){m.box(-.045,0,-.035,.09,h,.07,wood,9);m.box(-w/2,h*.52,-.035,w,.05,.07,wood,9);}
+  else{for(let i=0;i<5;i++){const x=-.38+i*.19;tube([x,.11,-.008],[Math.min(.40,x+.38),h-.11,-.008],.015,wood,.015,9);tube([x,.11,.035],[Math.max(-.40,x-.38),h-.11,.035],.015,wood,.015,9);}}return true;
+ }
+ if(t==='stocks'){
+  for(const x of [-.73,.64])m.box(x,0,-.12,.09,.89,.24,wood,9);
+  // Board segments leave two actual openings; no source feet are invented.
+  for(const [x,w] of [[-.64,.23],[-.14,.28],[.41,.23]])m.box(x,.32,-.10,w,.35,.20,wood,9);
+  m.box(-.64,.20,-.1,1.28,.12,.20,wood,9);m.box(-.64,.67,-.1,1.28,.16,.20,wood,9);return true;
+ }
+ if(t==='key'){
+  arc(0,.70,0,.14,0,TAU,'xy',metal,.032);tube([0,.56,0],[0,.09,0],.03);m.box(-.015,.08,-.035,.24,.07,.07,metal,2);m.box(.10,.08,-.035,.05,.15,.07,metal,2);return true;
+ }
+ if(t==='lock'){
+  m.box(-.24,.10,-.13,.48,.45,.26,wood,9);m.box(-.05,.19,.135,.10,.13,.01,C.dark,8);m.box(-.34,.35,-.07,.68,.08,.14,wood,9);for(const x of [-.17,.17])m.box(x-.02,.49,.14,.04,.04,.025,metal,2);return true;
+ }
+ if(t==='needle'){
+  tube([0,.025,0],[0,.70,0],.013,metal,.008);arc(0,.77,0,.065,0,TAU,'xy',metal,.012);return true;
+ }
+ if(t==='awl'){
+  sphere(0,.18,0,.12,.18,.12,wood,9);tube([0,.33,0],[0,.84,0],.028,metal,.002);return true;
+ }
+ if(t==='honeycomb'){
+  const col=rgb('#c29f48');m.box(-.41,.015,-.29,.82,.05,.58,col,13);
+  const cells=lod>1?3:2;for(let i=0;i<cells;i++)for(let j=0;j<cells;j++)m.ring(-.23+i*.23,.077,-.18+j*.18,.108,.077,col,13,6);return true;
+ }
+ if(t==='salt'||t==='flour'){
+  const salt=t==='salt',col=salt?rgb('#d7d8c8'):rgb('#d5c6a1');m.dome(0,.015,0,salt?.38:.48,salt?.25:.17,col,sides,lod>1?4:2,8);
+  if(salt){m.box(-.19,.09,-.14,.095,.09,.09,col,8);m.box(.12,.09,.03,.08,.12,.10,col,8);}else for(let i=0;i<3;i++)tube([-.28+i*.18,.04,.12],[-.19+i*.15,.14,.08],.012,mix(col,wood,.15),.008,13);return true;
+ }
+ if(t==='oil'||t==='honey'){
+  const oil=t==='oil',col=oil?rgb('#a6a452'):rgb('#b98138');sphere(0,oil?.025:.09,0,oil?.48:.33,oil?.018:.085,oil?.31:.26,col,3);
+  if(!oil)sphere(.23,.035,.18,.15,.025,.13,col,3);return true;
+ }
+ if(t==='chest'){
+  m.box(-.55,.05,-.32,1.1,.62,.64,wood,9);m.box(-.57,.67,-.34,1.14,.09,.68,wood,9);
+  for(const x of [-.40,.34]){m.box(x,.04,.325,.06,.63,.025,metal,2);m.box(x,.766,-.34,.06,.018,.68,metal,2);}m.box(-.06,.54,.34,.12,.16,.03,metal,2);return true;
+ }
+ if(t==='hammer'){
+  handle([0,.04,0],[0,.82,0],.045);m.box(-.28,.72,-.09,.56,.19,.18,metal,2);return true;
+ }
+ if(t==='axe'||t==='mattock'){
+  handle([0,.03,0],[0,.96,0]);if(t==='axe'){m.quad([.02,.67,-.035],[.39,.63,-.035],[.39,.94,-.035],[.02,.86,-.035],metal,2);m.quad([.02,.67,.035],[.02,.86,.035],[.39,.94,.035],[.39,.63,.035],metal,2);}
+  else{tube([-.39,.81,0],[.28,.84,0],.047);m.box(.25,.77,-.14,.13,.10,.28,metal,2);}return true;
+ }
+ if(t==='saw'){
+  m.box(-.51,.05,-.16,.86,.035,.22,metal,2);m.box(.35,.015,-.19,.23,.10,.29,wood,9);
+  for(let i=0;i<(lod>1?12:6);i++){const n=lod>1?12:6,x=-.51+i*.86/n;m.triangle([x,.052,.06],[x+.86/n,.052,.06],[x+.43/n,.052,.14],metal,2);}return true;
+ }
+ if(t==='sickle'){
+  handle([0,.02,0],[0,.40,0],.05);arc(.24,.40,0,.24,Math.PI,Math.PI*2.15,'xy',metal,.038);return true;
+ }
+ if(t==='shovel'){
+  handle([0,.23,0],[0,1.13,0],.035);m.quad([-.16,.27,-.02],[.16,.27,-.02],[.19,.03,.09],[-.19,.03,.09],metal,2);return true;
+ }
+ if(t==='tongs'||t==='snuffers'){
+  const snuff=t==='snuffers';for(const side of [-1,1]){tube([side*.16,.04,0],[side*.05,.60,0],.024);tube([side*.05,.60,0],[0,.76,0],.024);if(snuff){arc(side*.14,.12,0,.085,0,TAU,'xy',metal,.020);m.box(side*.05-.035,.58,-.04,.07,.16,.08,metal,2);}else tube([side*.16,.04,0],[side*.08,.015,.05],.032);}return true;
+ }
+ if(t==='caldron'){
+  m.cylinder(0,.10,0,.27,.47,metal,sides,.40,2);m.ring(0,.58,0,.41,.34,metal,2,sides);m.cylinder(0,.57,0,.335,.012,C.dark,sides,undefined,8);for(const x of [-.42,.42])arc(x,.48,0,.11,0,TAU,'yz',metal,.028);for(const x of [-.20,.20])m.box(x-.03,0,-.03,.06,.16,.06,metal,2);return true;
+ }
+ if(t==='frying-pan'||t==='dish'||t==='snuff-dish'){
+  const pan=t==='frying-pan',snuff=t==='snuff-dish',r=pan?.34:snuff?.23:.42,h=pan?.065:snuff?.10:.045;
+  m.cylinder(0,.015,0,r*.90,h,metal,sides,r,2);m.ring(0,h+.015,0,r,r*.88,metal,2,sides);m.cylinder(0,h+.013,0,r*.87,.004,snuff?C.dark:mix(metal,C.pale,.14),sides,undefined,2);
+  if(pan)handle([0,.07,.31],[0,.10,.83],.030);if(snuff)m.box(-.24,.02,-.05,.48,.08,.10,metal,2);return true;
+ }
+ if(t==='spoon'){
+  tube([0,.05,-.36],[0,.05,.12],.020);sphere(0,.047,.22,.09,.027,.14,metal,2);return true;
+ }
+ if(t==='flesh-hook'||t==='hook'){
+  const flesh=t==='flesh-hook';tube([0,.04,0],[0,flesh?.85:.53,0],.032);if(flesh)for(const x of [-.11,0,.11]){tube([0,.77,0],[x,.86,0],.025);arc(x,.90,0,.08,-Math.PI/2,Math.PI/2,'yz',metal,.023);}else arc(.12,.53,0,.12,0,Math.PI,'xy',metal,.028);return true;
+ }
+ if(t==='cart'||t==='wagon'){
+  const wagon=t==='wagon',len=wagon?1.42:1.07;m.box(-.48,.40,-len/2,.96,.12,len,wood,9);
+  for(const x of [-.50,.43])m.box(x,.51,-len/2,.07,wagon?.43:.18,len,wood,9);for(const z of [-len/2,len/2-.06])m.box(-.43,.51,z,.86,wagon?.43:.18,.06,wood,9);
+  for(const z of wagon?[-.48,.48]:[0]){tube([-.62,.34,z],[.62,.34,z],.05,wood,.05,9);for(const x of [-.65,.65]){arc(x,.34,z,.32,0,TAU,'yz',wood,.045);for(let i=0;i<6;i++){const a=i*TAU/6;tube([x,.34,z],[x,.34+Math.cos(a)*.30,z+Math.sin(a)*.30],.022,wood,.022,9);}}}
+  for(const x of [-.28,.28])handle([x,.40,len/2],[x,.25,len/2+.68],.033);
+  if(wagon&&(o.covered===true||(o.evidence||[]).some(e=>/\bcovered wagons?\b/i.test(e.phrase||'')))){
+   for(const x of [-.44,.44])for(const z of [-len/2+.08,len/2-.08])m.box(x-.018,.90,z-.018,.036,.31,.036,wood,9);
+   const front=-len/2,back=len/2;
+   for(const [a,b,ya,yb] of [[-.50,-.30,.93,1.21],[-.30,.30,1.21,1.21],[.30,.50,1.21,.93]])m.quad([a,ya,front],[a,ya,back],[b,yb,back],[b,yb,front],cloth,13);
+  }return true;
+ }
+ if(t==='leopard'||t==='fox'||t==='swine'){
+  const fox=t==='fox',pig=t==='swine',col=rgb(fox?'#a77c47':pig?'#ab9487':'#ad975c'),h=pig?.42:fox?.40:.54,w=pig?.29:fox?.19:.24,len=pig?.40:fox?.40:.49;
+  sphere(0,h,0,w,pig?.28:.19,len,col);for(const x of [-w*.75,w*.75])for(const z of [-len*.65,len*.65])tube([x,h-.08,z],[x,.045,z],fox?.032:.046,col,fox?.027:.037,13);
+  sphere(0,h+.08,len+.07,pig?.22:.15,pig?.18:.14,pig?.18:.19,col);sphere(0,h+.03,len+.23,pig?.15:.075,.07,pig?.075:.13,col);
+  for(const side of [-1,1])m.triangle([side*.055,h+.17,len],[side*.17,h+.17,len+.03],[side*.10,h+(fox?.44:pig?.31:.28),len-.01],col,13);
+  if(fox){tube([0,h,-len],[.20,.25,-len-.40],.11,col,.055,13);sphere(.20,.25,-len-.4,.07,.06,.10,C.pale);}else if(pig){arc(.09,h-.04,-len-.07,.095,0,Math.PI*1.7,'xy',col,.018);}else{tube([0,h,-len],[.15,.29,-len-.58],.037,col,.020,13);if(lod>1)for(let i=0;i<9;i++)m.dome((i%2?1:-1)*.225,h+.03+(i%3)*.045,-.35+(i%5)*.15,.028,.025,C.dark,6,2,13);}return true;
+ }
+ if(t==='ostrich'){
+  const col=rgb('#575b51');for(const x of [-.14,.14]){tube([x,.64,0],[x,.03,.08],.036,wood,.027,13);tube([x,.05,.08],[x,.025,.24],.022,wood,.017,13);}sphere(0,.85,0,.31,.29,.38,col);tube([0,1,.24],[0,1.64,.40],.065,cloth,.047,13);sphere(0,1.68,.43,.09,.11,.12,cloth);m.triangle([-.055,1.66,.53],[.055,1.66,.53],[0,1.63,.68],metal,2);for(const side of [-1,1])sphere(side*.27,.86,-.03,.08,.18,.28,C.pale);return true;
+ }
+ if(t==='whale'){
+  const col=rgb('#697b81');sphere(0,.33,0,.34,.27,.86,col);sphere(0,.35,.67,.28,.22,.28,col);tube([0,.32,-.65],[0,.26,-1.22],.20,col,.055,13);
+  for(const side of [-1,1]){m.triangle([0,.28,-1.14],[side*.40,.29,-1.36],[side*.30,.24,-1.04],col,13);m.triangle([side*.22,.25,.25],[side*.58,.13,-.05],[side*.28,.18,-.22],col,13);}return true;
+ }
+ if(t==='egg'){sphere(0,.18,0,.13,.18,.13,C.pale);return true;}
+ if(t==='cucumber'){sphere(0,.11,0,.11,.10,.37,green);for(const x of [-.07,.07])tube([x,.17,-.26],[x,.17,.26],.009,mix(green,C.pale,.20),.009,13);return true;}
+ if(t==='melon'){
+  const col=rgb('#c1b46b');sphere(0,.28,0,.34,.28,.34,col);for(let i=0;i<8;i++){const a=i*TAU/8;handle([Math.cos(a)*.27,.13,Math.sin(a)*.27],[Math.cos(a)*.27,.41,Math.sin(a)*.27],.010);}m.cylinder(0,.52,0,.018,.08,wood,6);return true;
+ }
+ if(t==='leek'){
+  tube([0,.03,0],[0,.50,0],.065,C.pale,.04,13);for(const side of [-1,0,1])m.quad([-.045,.41,0],[.045,.41,0],[side*.16+.035,.92,-.09],[side*.16-.035,.92,-.09],green,13);return true;
+ }
+ if(t==='onion'){
+  sphere(0,.18,0,.20,.17,.20,rgb('#bd9463'));tube([0,.31,0],[0,.60,.03],.028,green,.007,13);for(const x of [-.06,0,.06])tube([x,.045,0],[x*.6,.008,.06],.007,cloth,.002,13);return true;
+ }
+ if(t==='garlic'){
+  const col=rgb('#d4cbb2');for(let i=0;i<5;i++){const a=i*TAU/5;sphere(Math.cos(a)*.075,.13,Math.sin(a)*.075,.07,.12,.07,col);}tube([0,.18,0],[0,.39,0],.026,col,.009,13);return true;
+ }
+ if(t==='lentil'){
+  // One seed, not an invented serving or an extra vessel.
+  sphere(0,.03,0,.10,.027,.095,rgb('#967653'));m.ring(0,.048,0,.045,.036,wood,13,8);return true;
+ }
+ if(t==='almond'){
+  sphere(0,.09,0,.09,.075,.19,rgb('#a88458'));tube([0,.161,-.15],[0,.161,.15],.008,wood,.005,13);return true;
+ }
+ if(t==='nut'){
+  sphere(0,.12,0,.14,.12,.14,rgb('#8c7148'));arc(0,.12,0,.142,0,TAU,'yz',wood,.009);return true;
+ }
+ if(t==='cinnamon'){
+  tube([0,.065,-.35],[0,.065,.35],.062,rgb('#9b6942'),.058,9);arc(0,.065,.35,.043,0,TAU,'xy',wood,.008);return true;
+ }
+ if(t==='mandrake'){
+  const col=rgb('#ba956b');sphere(0,.23,0,.105,.17,.10,col);for(const side of [-1,1])tube([side*.03,.12,0],[side*.14,.02,.035],.047,col,.013,13);
+  for(const side of [-1,1])m.quad([0,.36,0],[side*.23,.44,-.08],[side*.33,.39,.08],[0,.34,.02],green,13);return true;
+ }
+ if(t==='battering-ram'){
+  for(const x of [-.44,.44])for(const z of [-.70,.70]){handle([x,0,z],[x,.90,z]);handle([x,.90,z],[0,1.16,z],.045);}for(const z of [-.70,.70])handle([-.44,.90,z],[.44,.90,z]);handle([0,1.16,-.70],[0,1.16,.70]);
+  tube([0,.56,-.94],[0,.56,1.00],.14,wood,.14,9);m.box(-.17,.39,.94,.34,.34,.10,metal,2);for(const z of [-.48,.48])tube([0,1.12,z],[0,.67,z],.018,cloth,.018,9);return true;
+ }
+ if(t==='anvil'){
+  m.box(-.27,.02,-.18,.54,.12,.36,metal,2);m.box(-.16,.14,-.12,.32,.28,.24,metal,2);m.box(-.34,.42,-.17,.68,.12,.34,metal,2);tube([.32,.48,0],[.62,.47,0],.12,metal,.01);return true;
+ }
+ if(t==='bell'){
+  m.cylinder(0,.08,0,.24,.32,metal,sides,.12,2);m.ring(0,.08,0,.25,.19,metal,2,sides);sphere(0,.055,0,.045,.048,.045,metal,2);arc(0,.45,0,.075,0,TAU,'xy',metal,.020);return true;
+ }
+ if(t==='nail'){
+  tube([0,.025,0],[0,.61,0],.026,metal,.035);m.cylinder(0,.61,0,.075,.04,metal,8,undefined,2);return true;
+ }
+ if(t==='pen'){
+  tube([0,.025,0],[.12,.78,0],.015,wood,.033,9);m.triangle([-.013,.03,0],[.012,.03,0],[0,.003,.032],metal,2);return true;
+ }
+ if(t==='inkhorn'){
+  m.cylinder(0,.02,0,.15,.24,clay,sides,.12,8);m.ring(0,.27,0,.12,.075,clay,8,sides);m.cylinder(0,.263,0,.074,.008,C.dark,sides,undefined,8);arc(.14,.15,0,.085,-Math.PI/2,Math.PI/2,'xy',wood,.020);return true;
+ }
+ return false;
+}
+
+// Physical relief lettering; the worker needs neither a font download nor a DOM.
+const SOURCE_GLYPHS={
+ A:'01110/10001/10001/11111/10001/10001/10001',B:'11110/10001/10001/11110/10001/10001/11110',C:'01111/10000/10000/10000/10000/10000/01111',D:'11110/10001/10001/10001/10001/10001/11110',
+ E:'11111/10000/10000/11110/10000/10000/11111',F:'11111/10000/10000/11110/10000/10000/10000',G:'01111/10000/10000/10111/10001/10001/01111',H:'10001/10001/10001/11111/10001/10001/10001',
+ I:'11111/00100/00100/00100/00100/00100/11111',J:'00111/00010/00010/00010/10010/10010/01100',K:'10001/10010/10100/11000/10100/10010/10001',L:'10000/10000/10000/10000/10000/10000/11111',
+ M:'10001/11011/10101/10101/10001/10001/10001',N:'10001/11001/11001/10101/10011/10011/10001',O:'01110/10001/10001/10001/10001/10001/01110',P:'11110/10001/10001/11110/10000/10000/10000',
+ Q:'01110/10001/10001/10001/10101/10010/01101',R:'11110/10001/10001/11110/10100/10010/10001',S:'01111/10000/10000/01110/00001/00001/11110',T:'11111/00100/00100/00100/00100/00100/00100',
+ U:'10001/10001/10001/10001/10001/10001/01110',V:'10001/10001/10001/10001/10001/01010/00100',W:'10001/10001/10001/10101/10101/11011/10001',X:'10001/10001/01010/00100/01010/10001/10001',
+ Y:'10001/10001/01010/00100/00100/00100/00100',Z:'11111/00001/00010/00100/01000/10000/11111',
+ '0':'01110/10001/10011/10101/11001/10001/01110','1':'00100/01100/00100/00100/00100/00100/01110','2':'01110/10001/00001/00010/00100/01000/11111','3':'11110/00001/00001/01110/00001/00001/11110',
+ '4':'00010/00110/01010/10010/11111/00010/00010','5':'11111/10000/10000/11110/00001/00001/11110','6':'01110/10000/10000/11110/10001/10001/01110','7':'11111/00001/00010/00100/01000/01000/01000',
+ '8':'01110/10001/10001/01110/10001/10001/01110','9':'01110/10001/10001/01111/00001/00001/01110',
+ '.':'00000/00000/00000/00000/00000/00110/00110',',':'00000/00000/00000/00000/00110/00110/00100',':':'00000/00110/00110/00000/00110/00110/00000',';':'00000/00110/00110/00000/00110/00110/00100',
+ "'":'00100/00100/00000/00000/00000/00000/00000','!':'00100/00100/00100/00100/00100/00000/00100','?':'01110/10001/00001/00010/00100/00000/00100','-':'00000/00000/00000/11111/00000/00000/00000',
+ '(':'00010/00100/01000/01000/01000/00100/00010',')':'01000/00100/00010/00010/00010/00100/01000','/':'00001/00001/00010/00100/01000/10000/10000','"':'01010/01010/00000/00000/00000/00000/00000'
+};
+function sourceInscriptionLines(text,columns){
+ const lines=[];let line='';
+ for(const token of String(text).match(/\S+\s*/g)||[]){
+  const word=token.trimEnd();if(line.length&&line.length+word.length>columns){lines.push(line.trimEnd());line='';}
+  for(const ch of word){if(line.length>=columns){lines.push(line);line='';}line+=ch;}
+  if(/\s$/.test(token))line+=' ';
+ }
+ if(line.trimEnd())lines.push(line.trimEnd());return lines.length?lines:[''];
+}
+function reliefSourceLetters(m,text,x,top,z,unit,color){
+ let count=0;const unsupported=[];
+ for(let i=0;i<text.length;i++){
+  const char=text[i];if(/\s/.test(char))continue;count++;
+  const glyph=SOURCE_GLYPHS[char.toUpperCase()];if(!glyph){unsupported.push(char);continue;}
+  for(const [row,bits] of glyph.split('/').entries())for(let col=0;col<bits.length;){
+   if(bits[col]!=='1'){col++;continue;}let end=col+1;while(bits[end]==='1')end++;
+   m.box(x+(i*6+col)*unit,top-(row+1)*unit,z,(end-col)*unit,unit,unit*.18,color,0);col=end;
+  }
+ }
+ return {count,unsupported};
+}
+function drawSourceInscription(m,plan,style,lod=2){
+ const text=String(plan.text||''),reference=String(plan.reference||''),begin=m.used,evidence=[{verse:Number(plan.verse)||1,phrase:text,offset:0,reference}];
+ if(lod===0){
+  const label=String(plan.verse||1),unit=.045;m.box(-.30,.02,5.55,.60,.38,.06,C.stone,8);
+  const glyph=reliefSourceLetters(m,label,-label.length*3*unit,.33,5.615,unit,C.gold);
+  return {text,reference,evidence,displayedInFull:false,inscribedCharacters:glyph.count,unsupported:glyph.unsupported,vertices:(m.used-begin)/11,illustrative:true,display:'verse-number'};
+ }
+ const columns=45,unit=.044,lines=sourceInscriptionLines(text,columns),width=12.55,height=Math.max(.70,(lines.length+1)*8*unit+.16),bottom=Math.max(.20,(Number(plan.displayHeight)||0)+.35),top=bottom+height-.13,z=-5.11,x=-width/2;
+ // A modern source display, placed behind the stage; it is not a source prop.
+ m.box(x-.09,bottom-.09,z-.085,width+.18,height+.18,.10,rgb('#72563d'),9);
+ m.box(x,bottom,z,width,height,.035,rgb('#dbcbac'),13);
+ const header=String(plan.reference||'SOURCE'),headerUnit=Math.min(.020,11.8/(Math.max(1,header.length)*6));
+ reliefSourceLetters(m,header,x+.23,top,z+.043,headerUnit,rgb('#8a693f'));
+ let count=0;const unsupported=[];
+ for(const [i,line] of lines.entries()){
+  const r=reliefSourceLetters(m,line,x+.18,top-.27-i*8*unit,z+.041,unit,rgb('#4a3c2f'));count+=r.count;unsupported.push(...r.unsupported);
+ }
+ for(const xx of [x-.04,x+width+.04]){m.cylinder(xx,.02,z-.04,.075,bottom+height+.10,C.wood,8);m.dome(xx,bottom+height+.13,z-.04,.09,.08,C.gold,8,3,2);}
+ return {text,reference,evidence,displayedInFull:true,inscribedCharacters:count,unsupported:[...new Set(unsupported)],vertices:(m.used-begin)/11,illustrative:true,display:'exact-source-relief',fontUnit:unit,x:0,y:bottom+height/2,z,height,width};
 }
 
 function flatHouse(m,w,d,h,style,random,variant=0){
@@ -1352,7 +1793,8 @@ function buildWorld(d,chapter,profiles,scope='book',moment=null,bookMoments=null
  }
  // Short lanes connect neighboring houses; the broad story route crosses the district.
  if(!['flood','sea'].includes(world))for(let k=0;k<homes.length;k+=3){const a=homes[k],near=homes.filter((p,i)=>i!==k&&Math.hypot(a[0]-p[0],a[2]-p[2])<7).sort((p,q)=>Math.hypot(a[0]-p[0],a[2]-p[2])-Math.hypot(a[0]-q[0],a[2]-q[2]))[0];if(near)road(m,[a[0],a[1],a[2]+2],[near[0],near[1],near[2]+2],terrain,style,.68)}
- const fort=['city','fortress','palace','temple','prison','newcity','ruins'].includes(world);
+ const selectedDestruction=scope==='chapter'&&moment?.scene.grain==='verse'&&moment.scene.selectedPlans?.some(p=>(p.features||[]).some(f=>['wall','city'].includes(f.type)&&/fallen|collapsed|overthrown|burned-desolation/.test(f.state||'')));
+ const fort=!selectedDestruction&&['city','fortress','palace','temple','prison','newcity','ruins'].includes(world);
  if(fort&&world!=='newcity'){const sides=18,rad=passageWallRadius(moment,R);for(let j=0;j<sides;j++){let a=j*TAU/sides,b=(j+1)*TAU/sides,x=Math.sin(a)*rad,z=Math.cos(a)*rad,xx=Math.sin(b)*rad,zz=Math.cos(b)*rad,y=terrain.height(x,z),yy=terrain.height(xx,zz);if(y<1||yy<1)continue;let dx=xx-x,dz=zz-z,len=Math.hypot(dx,dz),midy=Math.max(y,yy),angle=Math.atan2(dz,dx);if(j%5!==1)context(m,(x+xx)/2,midy,(z+zz)/2,angle,1,()=>{for(let t=0;t<len;t+=1.0){const xx2=x+dx*(t+.5)/len,zz2=z+dz*(t+.5)/len,base=terrain.height(xx2,zz2)-midy;m.box(-len/2+t,base,-.40,Math.min(1.04,len-t),Math.max(.35,2.0-base),.8,style.stone);}m.box(-len/2,2,-.48,len,.18,.96,C.pale);for(let t=-len/2;t<len/2;t+=.75)m.box(t,2.18,-.40,.36,.35,.8,style.stone)});context(m,x,y,z,0,.7,()=>tower(m,2.0,4.3,style,world==='ruins'));}}
  if(world==='newcity'){
   const rad=passageWallRadius(moment,R),jewels=['#688fba','#3f7190','#6f9d89','#879051','#a78974','#a66a4d','#b9a26b','#64a398','#899b3e','#83a0a5','#626b99','#a07c9d'].map(rgb);
@@ -1368,11 +1810,11 @@ function buildWorld(d,chapter,profiles,scope='book',moment=null,bookMoments=null
  const mainStory=nodes.find(n=>n.chapter===chapter)||nodes[0];if(config.sinai){walkBlockers.push(0,-R*.50,R*.43);for(const x of [-10,-6,0,6,10])walkBlockers.push(mainStory.x+x,mainStory.z+6+(Math.abs(x)%3),1.6);}if(groundStage&&moment.scene.recipe==='eden')for(const x of [-3.5,3.5])walkBlockers.push(mainStory.x+x,mainStory.z-1,.65);const narrative=moment?composeMoment(m,moment,mainStory,terrain,style,random):{detailNodes:[],props:[]};
  terrainMesh(m,R,config,terrain,seed);if(config.river&&world!=='newcity')waterfalls(m,terrain,R,random);if(config.egyptDelta&&chapter===1&&scope==='chapter'&&chosen.landmark==='store_city'){const px=R*.79,pz=-R*.73,py=Math.max(.15,terrain.height(px,pz));pyramid(m,px,py,pz,15,11,rgb('#b6986d'));pyramid(m,px+18,py+1,pz+4,9,7,rgb('#a58c69'));walkBlockers.push(px,pz,8,px+18,pz+4,5)}
  const main=nodes.find(n=>n.chapter===chapter)||nodes[0],camera={target:[0,config.shape==='peak'?9:5,0],dist:R*(scope==='book'?2.30:world==='flood'?2.2:2.78),yaw:.29,pitch:scope==='book'?.57:.70},focus={target:[main.x,main.y+main.h*.30,main.z],dist:Math.max(27,main.w*2.0),yaw:.43,pitch:.53};
- if(scope==='chapter'&&moment?.scene.grain==='verse'&&moment.scene.selectedPlans?.length){const stage=narrative.sceneInstances.find(p=>p.display==='selected-verse');if(stage){Object.assign(focus,{target:[stage.x,stage.y+1.5,stage.z],dist:24,yaw:.24,pitch:.49});Object.assign(camera,focus);}}
+ if(scope==='chapter'&&moment?.scene.grain==='verse'&&moment.scene.selectedPlans?.length){const stage=narrative.sceneInstances.find(p=>p.display==='selected-verse');if(stage){const height=stage.height||3;Object.assign(focus,{target:[stage.x,stage.y+Math.max(1.5,height*.36),stage.z],dist:Math.max(24,height*2.8),yaw:.24,pitch:.49});Object.assign(camera,focus);}}
  if(config.sinai&&!(moment?.scene.grain==='verse'&&moment.scene.selectedPlans?.length))Object.assign(focus,{target:[main.x,(main.y+style.sinaiPeak.y)*.5,(main.z+style.sinaiPeak.z)*.5],dist:R*2.25,yaw:.26,pitch:.58});const extent=R*1.42,segments=64,heights=new Float32Array((segments+1)*(segments+1));for(let iz=0;iz<=segments;iz++)for(let ix=0;ix<=segments;ix++)heights[iz*(segments+1)+ix]=terrain.height(-extent+ix*extent*2/segments,-extent+iz*extent*2/segments);const blockers=new Float32Array(walkBlockers);function freeAt(x,z){if(Math.abs(x)>extent-.5||Math.abs(z)>extent-.5||terrain.height(x,z)<.16)return false;for(let i=0;i<blockers.length;i+=3){const dx=x-blockers[i],dz=z-blockers[i+1],r=blockers[i+2]+.48;if(dx*dx+dz*dz<r*r)return false}return true}let spawn=[entry[0],entry[2]];if(!freeAt(...spawn)){let found=null;for(let ring=1;ring<=18&&!found;ring++)for(let j=0;j<32;j++){const a=j*TAU/32,x=entry[0]+Math.cos(a)*ring*1.05,z=entry[2]+Math.sin(a)*ring*1.05;if(freeAt(x,z)){found=[x,z];break}}if(found)spawn=found;}
  const selectedStage=narrative.sceneInstances?.find(p=>p.display==='selected-verse');if(selectedStage)spawn=[selectedStage.x+5.5,selectedStage.z+5.0];
  const navigation={extent,segments,heights,blockers,surfaces:terrain.height.walkSurfaces,spawn:new Float32Array(spawn)};
- return {data:m.array(),glows:new Float32Array(m.glows),navigation,storySurface,nodes,chapterLandmarks,storyRoute:chapterLandmarks.map(({chapter,id,x,y,z,label,glyphFamily,routeIndex})=>({chapter,id,x,y,z,label,glyphFamily,routeIndex})),detailNodes:[...bookDetails,...narrative.detailNodes],storyProps:narrative.props,sourceObjects:narrative.sourceObjects||[],sceneInstances:narrative.sceneInstances||[],momentId:moment?.id||null,storyRecipe:moment?.scene.recipe||null,camera,focus,profile:scope==='book'?{...chosen,title:profiles.overview,note:profiles.overview}:chosen,book:d.book,chapter,scope,world,stats:{terrain:config.shape,settlementKind:config.campSettlement||world==='camp'||world==='wilderness'?'tents':'buildings',buildings:built,trees:planted,areas:reps.length,triangles:m.used/33,routeCount:routes.length,verseStops:narrative.detailNodes.filter(n=>n.kind==='verses').length,sourceObjects:(narrative.sourceObjects||[]).length,region:style.region,chapterStops:chapterLandmarks.length,pathSegments:Math.max(0,chapterLandmarks.length-1),...(scope==='book'?{caption:`${chapterLandmarks.length} profiled chapter landmarks · connected in canonical order`}:{})},key:d.book+'|'+chapter+'|'+scope};
+ return {data:m.array(),glows:new Float32Array(m.glows),navigation,storySurface,nodes,chapterLandmarks,storyRoute:chapterLandmarks.map(({chapter,id,x,y,z,label,glyphFamily,routeIndex})=>({chapter,id,x,y,z,label,glyphFamily,routeIndex})),detailNodes:[...bookDetails,...narrative.detailNodes],storyProps:narrative.props,sourceObjects:narrative.sourceObjects||[],sceneInstances:narrative.sceneInstances||[],momentId:moment?.id||null,storyRecipe:moment?.scene.recipe||null,camera,focus,profile:scope==='book'?{...chosen,title:profiles.overview,note:profiles.overview}:chosen,book:d.book,chapter,scope,world,stats:{terrain:config.shape,backgroundFortification:fort,settlementKind:config.campSettlement||world==='camp'||world==='wilderness'?'tents':'buildings',buildings:built,trees:planted,areas:reps.length,triangles:m.used/33,routeCount:routes.length,verseStops:narrative.detailNodes.filter(n=>n.kind==='verses').length,sourceObjects:(narrative.sourceObjects||[]).length,region:style.region,chapterStops:chapterLandmarks.length,pathSegments:Math.max(0,chapterLandmarks.length-1),...(scope==='book'?{caption:`${chapterLandmarks.length} profiled chapter landmarks · connected in canonical order`}:{})},key:d.book+'|'+chapter+'|'+scope};
 }
 function buildAtlas(model,allProfiles){
  const m=new Mesh(),positions=[],islandStories=[],random=rand(247);skyDome(m);m.quad([-600,.13,-500],[-600,.13,500],[600,.13,500],[600,.13,-500],C.water,3);
@@ -57224,6 +57666,7 @@ const sceneGospels=new Set(['Matthew','Mark','Luke','John']);
 const sceneLetters=new Set(books.slice(books.indexOf('Romans'),books.indexOf('Revelation')));
 const sceneExcludedPeople=new Set(['Israel','Egypt','Egyptians','Assyria','Babylon','Babylonians','Chaldeans','Canaan','Canaanites','Philistines','Moab','Edom','Ammon','Syria','Syrians','Judah','Ephraim','Manasseh','Dan','Gad']);
 const sceneGenericTitles=new Set(['God','LORD','Lord','King','Father','Son','Master','Teacher','Rabbi','Shepherd','Lamb','Messiah','Christ','Almighty','Maker','Redeemer','Savior','Saviour','Judge','Servant','The Elder','The Word','The Light','The Living One','Holy One','Prince','Rock','Branch','Stone','Leader','Advocate','Lawgiver','Guardian']);
+const supplementalTangibleTypes=new Set('oven kneading-trough sack door lattice window stocks key lock needle awl honeycomb salt chest hammer axe saw mattock sickle shovel tongs caldron frying-pan dish spoon flesh-hook snuffers snuff-dish cart wagon leopard fox swine ostrich whale flour oil honey egg cucumber melon leek onion garlic lentil almond nut cinnamon mandrake battering-ram anvil bell nail hook pen inkhorn scrip'.split(' '));
 // These are literary frames, not casts or scene reconstructions. They keep
 // extended songs, sermons and parables from becoming current events between tags.
 const sceneLiteraryRanges=new Map();
@@ -57232,7 +57675,8 @@ for(const [book,ch,start,end,mode] of [
  ['Matthew',5,1,99,'discourse'],['Matthew',6,1,99,'discourse'],['Matthew',7,1,99,'discourse'],['Matthew',10,5,42,'discourse'],['Matthew',13,3,52,'parable'],['Matthew',18,3,35,'discourse'],['Matthew',20,1,16,'parable'],['Matthew',21,28,46,'parable'],['Matthew',22,1,14,'parable'],['Matthew',23,1,99,'discourse'],['Matthew',24,1,99,'discourse'],['Matthew',25,1,99,'parable'],
  ['Mark',4,3,34,'parable'],['Mark',12,1,12,'parable'],['Mark',13,1,99,'discourse'],
  ['Luke',6,20,49,'discourse'],['Luke',10,30,37,'parable'],['Luke',11,2,13,'discourse'],['Luke',12,13,59,'discourse'],['Luke',13,6,9,'parable'],['Luke',14,16,24,'parable'],['Luke',15,1,99,'parable'],['Luke',16,1,31,'parable'],['Luke',18,1,14,'parable'],['Luke',19,11,27,'parable'],['Luke',21,5,38,'discourse'],
- ['John',1,1,18,'discourse'],['John',3,10,21,'discourse'],['John',3,27,36,'discourse'],['John',5,19,47,'discourse'],['John',6,26,65,'discourse'],['John',7,37,38,'discourse'],['John',8,12,59,'discourse'],['John',10,1,18,'discourse'],['John',13,12,38,'discourse'],['John',14,1,99,'discourse'],['John',15,1,99,'discourse'],['John',16,1,99,'discourse'],['John',17,1,99,'discourse']
+ ['John',1,1,18,'discourse'],['John',3,10,21,'discourse'],['John',3,27,36,'discourse'],['John',5,19,47,'discourse'],['John',6,26,65,'discourse'],['John',7,37,38,'discourse'],['John',8,12,59,'discourse'],['John',10,1,18,'discourse'],['John',13,12,38,'discourse'],['John',14,1,99,'discourse'],['John',15,1,99,'discourse'],['John',16,1,99,'discourse'],['John',17,1,99,'discourse'],
+ ['Matthew',19,24,24,'discourse'],['Mark',10,25,25,'discourse'],['Luke',18,25,25,'discourse'],['Numbers',11,5,5,'recollection']
 ]){const key=book+'|'+ch,list=sceneLiteraryRanges.get(key)||[];list.push({start,end,mode});sceneLiteraryRanges.set(key,list);}
 function sceneEscape(text){return String(text).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
 function sceneWordHits(text,name){
@@ -57272,7 +57716,7 @@ function sceneSpeechStart(text){
  return m?m.index+m[0].length:Infinity;
 }
 function sceneNoNegation(text,offset,phrase){
- const before=text.slice(0,offset),hit=/\bno\s+([^,;:.!?]*)$/i.exec(before);if(!hit)return null;
+ const before=text.slice(0,offset),hit=/\bno\s+((?:(?!\bno\b)[^,;:.!?])*)$/i.exec(before);if(!hit)return null;
  const tail=hit[1].trim(),modifiers=/^(?:(?:good|evil|great|small|new|old|other|more|such|dry|clean|unclean|fresh|drinking|living|running|strong|high|low|long|short|golden|silver|stone|wooden|earthen|brazen|iron|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|\d+)\s*){0,4}$/i;
  // A determiner binds its noun phrase. It cannot reach through "heed to", a
  // conjunction, or a verb to negate a later object such as "the sword".
@@ -57379,7 +57823,7 @@ function sceneParseActors(book,ch,v,text,mode,actions){
 }
 const sceneCounts={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20};
 function sceneObjectQuantity(text,object){
- const prefix=text.slice(Math.max(0,object.offset-55),object.offset),hit=/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|\d+)\s+(?:(?:barley|small|large|golden|silver|stone|brazen|brass|wooden|earthen|new|old|great|white|black|red|fat|lean)\s+)?$/i.exec(prefix);
+ const prefix=text.slice(Math.max(0,object.offset-55),object.offset),hit=/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|\d+)\s+(?:(?:barley|small|large|golden|silver|stone|brazen|brass|wooden|earthen|new|old|great|white|black|red|fat|lean|covered)\s+)?$/i.exec(prefix);
  if(hit&&!/\b(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|score|\d+)\s+(?:or|and)|hundred|thousand|hundreds|thousands|score|about|almost|nearly|above|more than|less than|at least)\s*$/i.test(prefix.slice(0,hit.index))){const count=sceneCounts[hit[1].toLowerCase()]||Number(hit[1]);if(Number.isInteger(count)&&count>0&&count<=1000)return {count,countBasis:'source',phrase:hit[0]+object.phrase,offset:object.offset-hit[0].length};}
  return {count:1,countBasis:'representative',phrase:object.phrase,offset:object.offset};
 }
@@ -57468,8 +57912,11 @@ function scenePlan(book,ch,v,text,objects){
  }else{
   actors=sceneParseActors(book,ch,v,text,mode,actions);({props,features,unmodeled:parsedUnmodeled}=sceneParseObjects(book,ch,v,text,objects,mode));setting=sceneLocalSetting(text,mode);({region,regionEvidence}=sceneLocalRegion(book,ch,v,text,mode));
  }
+ let supplementaryProps=[];if(row){const entranceRepresented=features.some(f=>['cave','tent','gate'].includes(f.type))||props.some(p=>['tomb','tent','gate'].includes(p.type)),missing=(objects||extractObjects(text,book,ch)).filter(o=>supplementalTangibleTypes.has(o.type)&&!props.some(p=>p.type===o.type)&&!(o.type==='door'&&entranceRepresented));if(missing.length){const additional=sceneParseObjects(book,ch,v,text,missing,mode);supplementaryProps=additional.props.filter(p=>supplementalTangibleTypes.has(p.type)&&!(p.type==='door'&&entranceRepresented)).map(p=>({...p,sourceSupplement:true}));parsedUnmodeled.push(...additional.unmodeled.filter(o=>supplementalTangibleTypes.has(o.sourceType)));}}
  const unmodeled=[...sceneUnmodeled(book,ch,v,text,mode),...parsedUnmodeled],visual=actors.length+props.length+features.length,representation=visual?(row?'authored':mode==='narrative'?'parsed':'symbolic'):'reading';
- return {id:row?.id||'verse:'+book+':'+ch+':'+v,book,chapter:ch,verse:v,ordinal:ordinal(book,ch,v),reference:refLabel(ordinal(book,ch,v))||book+' '+ch+':'+v,text,title:row?.title||profiles[book]?.chapters?.[ch-1]?.title||book+' '+ch,mode,setting,region,regionEvidence,actors,props,actions,features,unmodeled,coverage:{representation,fullyModeled:false,readingRequired:true,sourceVerseCount:1,actorCount:actors.length,presentActorCount:actors.filter(a=>a.attendance==='present').length,referenceActorCount:actors.filter(a=>a.attendance==='reference').length,propCount:props.length,featureCount:features.length,actionCount:actions.length,unmodeledCount:unmodeled.length},authored:!!row,...(row?{authoredId:row.id,authoredRange:{start:row.start,end:row.end},notes:row.notes||''}:{notes:'Conservative parser: source mentions and representative objects do not establish unstated attendance, exact locations or complete meaning.'})};
+ const visualization=typeof composeVerseMeaning==='function'?composeVerseMeaning(book,ch,v,text,mode,actors,props,features,actions):null;
+ let notes=row?.notes||'';if(supplementaryProps.length&&/unsupported (?:nail|axe|cart)|Great whales and other sea life/.test(notes))notes='Additional tangible source terms are now modeled separately with literal evidence. Species, positions and any unstated relationships remain illustrative.';
+ return {id:row?.id||'verse:'+book+':'+ch+':'+v,book,chapter:ch,verse:v,ordinal:ordinal(book,ch,v),reference:refLabel(ordinal(book,ch,v))||book+' '+ch+':'+v,text,title:row?.title||profiles[book]?.chapters?.[ch-1]?.title||book+' '+ch,mode,setting,region,regionEvidence,actors,props,supplementaryProps,actions,features,unmodeled,visualization,coverage:{representation,fullyModeled:false,readingRequired:true,sourceVerseCount:1,actorCount:actors.length,presentActorCount:actors.filter(a=>a.attendance==='present').length,referenceActorCount:actors.filter(a=>a.attendance==='reference').length,propCount:props.length,supplementaryPropCount:supplementaryProps.length,featureCount:features.length,actionCount:actions.length,unmodeledCount:unmodeled.length,compositionAvailable:!!visualization,clauseCount:visualization?.clauses.length||0,motifCount:visualization?.motifs.length||0,relationCount:visualization?.relations.length||0},authored:!!row,...(row?{authoredId:row.id,authoredRange:{start:row.start,end:row.end},notes}:{notes:'Conservative parser: source mentions and representative objects do not establish unstated attendance, exact locations or complete meaning.'})};
 }
 function chapterSceneSummary(book,ch){
  ch=Number(ch);const blueprint=chapterBlueprint(book,ch);if(!blueprint||!blueprint.verses.length)return [];
@@ -57484,6 +57931,144 @@ function chapterSceneSummary(book,ch){
   for(const p of take(candidates,4-selected.length)){selected.push(p);verseIds.add(p.verse);}
  }
  return selected.sort((a,b)=>a.verse-b.verse).map(p=>({...p,summaryAnchor:p.verse===anchor.verse}));
+}
+
+// This module is injected into createStoryIndex. Every exhibit is illustrative;
+// literal phrase evidence establishes a mention, never an exhaustive interpretation.
+const compositionKinds={narrative:'narrative-extension',recollection:'narrative-extension',discourse:'teaching-exhibit',parable:'teaching-exhibit',wisdom:'teaching-exhibit',poetry:'poetic-landscape',genealogy:'family-register',letter:'letter-chamber',law:'law-workshop',vision:'vision-chamber',prophecy:'prophecy-chamber',reading:'source-chamber'};
+// Deliberately use KJV vocabulary and bounded words. Tangible objects remain in
+// the separate physical-prop path; these are source-linked conceptual exhibits.
+const compositionLexicon=[
+ ['compassion',/\b(?:is kind|be kind|kind one to another|kindness|kindly|compassion(?:s|ate)?|merc(?:y|ies|iful)|pit(?:y|ied)|tenderhearted|bowels of mercies|lovingkindness(?:es)?)\b/gi],
+ ['patience',/\b(?:patien(?:ce|t)|longsuffering|longsufferings|suffereth long|patiently|forbear(?:ance|ing)?|endure(?:d|th)?|enduring|wait(?:ed|eth|ing)?(?: upon)?|slow to (?:anger|wrath))\b/gi],
+ ['justice',/\b(?:just(?:ice|ly)?|righteous(?:ness|ly)?|equity|upright(?:ness|ly)?|judgment and justice|do right)\b/gi],
+ ['peace',/\b(?:peace(?:able|ably)?|reconcil(?:e|ed|iation)|tranquillity|quiet(?:ness|ly)?|still waters)\b/gi],
+ ['faith',/\b(?:faith(?:ful(?:ness|ly)?|less)?|believ(?:e|ed|eth|ing)|belief|trust(?:ed|eth|ing)?|confidence|assurance)\b/gi],
+ ['hope',/\b(?:hope(?:d|th)?|hoping|expectation)\b/gi],
+ ['love',/\b(?:charity|love(?:d|th|st)?|loveth|loving|beloved|love one another)\b/gi],
+ ['wisdom',/\b(?:wisdom|wise(?:ly)?|prud(?:ent|ence)|discretion|understanding|counsel(?:s|led|lors)?|fool(?:s|ish(?:ness)?)?)\b/gi],
+ ['truth',/\b(?:truth|true|truly|verily|sincer(?:e|ity)|faithful witness)\b/gi],
+ ['falsehood',/\b(?:false(?:hood|ly)?|lies|lying (?:lips|tongue|spirit|words|witness|vanities|to|unto)|liar(?:s)?|deceiv(?:e|ed|eth|ing)|deceit(?:ful|fully)?|guile|hypocris(?:y|ies)|hypocrit(?:e|es|ical))\b/gi],
+ ['fear',/\b(?:fear no evil|fear(?:ed|eth|ful|fulness|ing)?|afraid|dread(?:ed|ful)?|terror(?:s)?|trembl(?:e|ed|eth|ing))\b/gi],
+ ['comfort',/\b(?:comfort(?:ed|eth|ing|er|ers|s)?|consolation(?:s)?|encourag(?:e|ed)|good cheer)\b/gi],
+ ['joy',/\b(?:joy(?:ful|fully|ous)?|rejoic(?:e|ed|eth|ing)|glad(?:ness|ly)?|merry|cheerful(?:ness)?|delight(?:ed|eth|s)?)\b/gi],
+ ['grief',/\b(?:grie(?:f|ve|ved|vous)|sorrow(?:s|ful|ing)?|we(?:ep|eping|pt)|mourn(?:ed|eth|ing)?|tears|sad(?:ness)?|brokenhearted)\b/gi],
+ ['repentance',/\b(?:repent(?:ed|eth|ance|ing)?|contrite|turn from (?:his|their|thy|your) (?:evil|wicked)|return unto (?:me|the LORD))\b/gi],
+ ['forgiveness',/\b(?:forgiv(?:e|en|eth|ing)|forgave|forgiveness|pardon(?:ed)?|remission|blot out|blotted out)\b/gi],
+ ['obedience',/\b(?:obey(?:ed|eth|ing)?|obedien(?:t|ce)|keep(?:eth)? (?:my|his|the|thy|your) commandments|hearken(?:ed)? unto|did as .*?commanded)\b/gi],
+ ['rebellion',/\b(?:rebell(?:ed|ion|ious)|rebel(?:s)?|disobedien(?:t|ce)|transgress(?:ed|ion|ions|ors)?|sin(?:s|ned|neth|ner|ners|ful)?|wicked(?:ness)?|iniquit(?:y|ies)|stiffnecked)\b/gi],
+ ['life',/\b(?:life|lives|live(?:d|th|st)?|liveth|living|alive|quickened|eternal life|everlasting life|resurrection|raised from the dead)\b/gi],
+ ['death',/\b(?:death|dead|die(?:d|th)?|dieth|dying|kill(?:ed|eth|ing)?|slay|slew|slain|perish(?:ed|eth|ing)?|destroy(?:ed|eth|ing)?|destruction|grave(?:s)?|sepulchre(?:s)?)\b/gi],
+ ['light',/\b(?:light(?:s)?|shine(?:th)?|shining|shone|brightness|enlighten(?:ed)?|sun|moon|stars?|candle(?:s)?)\b/gi],
+ ['darkness',/\b(?:dark(?:ness)?|shadow of death|shadow(?:s)?|night)\b/gi],
+ ['path',/\b(?:path(?:s)?|way(?:s)?|highway(?:s)?|straight|crooked|steps?|walk(?:ed|eth|ing)?)\b/gi],
+ ['choice',/\b(?:choos(?:e|eth|ing)|chose(?:n)?|choose you|choose life|refus(?:e|ed|eth|ing)|reject(?:ed|eth|ing)?)\b/gi],
+ ['unity',/\b(?:unity|one accord|together|join(?:ed)?|gather(?:ed|eth|ing)?|assembl(?:y|ies|ed)|congregation|fellowship|one body|one flesh)\b/gi],
+ ['division',/\b(?:divid(?:e|ed|eth|ing)|division(?:s)?|separat(?:e|ed|ion)|scatter(?:ed|eth|ing)?|strife|contention(?:s)?|discord|enmity)\b/gi],
+ ['humility',/\b(?:humbl(?:e|ed|eth)|humility|meek(?:ness)?|lowly|poor in spirit)\b/gi],
+ ['pride',/\b(?:pride|proud|haughty|haughtiness|highminded|puffed up|vaunteth|boast(?:ed|eth|ing)?|arrogancy)\b/gi],
+ ['service',/\b(?:serv(?:e|ed|eth|ing|ant|ants|ice)|minister(?:ed|eth|ing|s)?|ministration|help(?:ed|eth|ing)?|succour(?:ed)?)\b/gi],
+ ['provision',/\b(?:provid(?:e|ed)|provision|supply|supplied|supplieth|fed|feed(?:eth|ing)?|food|bread|meat|manna|drink|water|hunger|thirst|want(?:ed|eth)?)\b/gi],
+ ['poverty',/\b(?:poor|poverty|needy|need|beggar(?:s)?|destitute|alms)\b/gi],
+ ['wealth',/\b(?:wealth|rich(?:es)?|richly|treasure(?:s)?|gain|profit|money|silver|gold|mammon|possessions?)\b/gi],
+ ['covenant',/\b(?:covenant(?:s)?|testament|oath|sware|swear(?:eth)?|sworn|seal(?:ed)?|circumcis(?:ion|ed))\b/gi],
+ ['promise',/\b(?:promis(?:e|ed|es)|vow(?:s|ed)?|pledge|sure word)\b/gi],
+ ['judgment',/\b(?:judg(?:e|es|ed|eth|ing|ment|ments)|condemn(?:ed|ation)?|punish(?:ed|ment|ments)?|vengeance|wrath|recompence|reward(?:ed|eth|s)?|day of the LORD)\b/gi],
+ ['deliverance',/\b(?:deliver(?:ed|eth|ing|ance)?|redeem(?:ed|eth|ing|er)?|redemption|ransomed|ransom|salvation|sav(?:e|ed|eth|ing|iour)|rescue|escape(?:d)?)\b/gi],
+ ['bondage',/\b(?:bondage|bond(?:s|man|men|maid|maids|woman|women)|bound|captiv(?:e|es|ity)|prison(?:s|er|ers)?|fetters|chains|yoke)\b/gi],
+ ['freedom',/\b(?:free(?:dom|ly)?|liberty|loosed|release(?:d)?|set at liberty)\b/gi],
+ ['worship',/\b(?:worship(?:ped|peth|ping)?|adore|bow(?:ed)? down|idol(?:s|atry)?|false gods|other gods)\b/gi],
+ ['prayer',/\b(?:pray(?:ed|eth|ing|er|ers)?|supplication(?:s)?|intercession|beseech|besought|intreat(?:ed)?|call upon)\b/gi],
+ ['praise',/\b(?:prais(?:e|ed|eth|ing|es)|thank(?:s|ful|sgiving)?|sing(?:eth|ing)?|sang|sung|psalm(?:s)?|hymn(?:s)?|glorify|glorified|glory|hallelujah|alleluia)\b/gi],
+ ['hearing',/\b(?:hear(?:d|eth|ing)?|hearken(?:ed)?|ear(?:s)?|listen|deaf)\b/gi],
+ ['speech',/\b(?:speak(?:eth|ing)?|spake|said|saith|say(?:ing)?|voice(?:s)?|tongue(?:s)?|mouth(?:s)?|lips|answer(?:ed|eth)?|preach(?:ed|ing)?)\b/gi],
+ ['silence',/\b(?:silen(?:ce|t)|hold (?:thy|his|your|their) peace|held (?:his|their) peace|dumb|still)\b/gi],
+ ['purity',/\b(?:pure|purity|clean(?:se|sed|ness)?|holy|holiness|sanctif(?:y|ied|ication)|undefiled|without blemish|wash(?:ed|eth|ing)?)\b/gi],
+ ['pollution',/\b(?:unclean(?:ness)?|defil(?:e|ed|eth|ing)|pollut(?:e|ed|ion)|filth(?:y|iness)?|corrupt(?:ed|ion|ible)?|abomination(?:s)?)\b/gi],
+ ['sacrifice',/\b(?:sacrific(?:e|es|ed|ing)|offer(?:ed|eth|ing|ings)?|altar(?:s)?|burnt offering|atonement|oblation(?:s)?|blood)\b/gi],
+ ['instruction',/\b(?:instruct(?:ed|ion|ions)?|teach(?:eth|ing)?|taught|doctrine|law(?:s)?|command(?:ed|ment|ments)?|statute(?:s)?|ordinance(?:s)?|precept(?:s)?|shalt|shall|must|ought|let us|be ye)\b/gi],
+ ['blessing',/\b(?:bless(?:ed|eth|ing|ings)?|blest|favour|grace|happy|prosper(?:ed|ity|ous)?)\b/gi],
+ ['curse',/\b(?:curse(?:d|s)?|cursing|accursed|woe(?:s)?)\b/gi],
+ ['strength',/\b(?:strength(?:en|ened)?|strong|mighty|might and power|power and might|power(?:s|ful)?|valour|courage|bold(?:ly|ness)?|prevail(?:ed)?)\b/gi],
+ ['weakness',/\b(?:weak(?:ness)?|feeble|faint(?:ed|eth)?|infirm(?:ity|ities)|weary|weariness)\b/gi],
+ ['protection',/\b(?:protect(?:ion)?|refuge|shelter|shield(?:s)?|buckler|defence|defend(?:ed)?|fortress|keep(?:er)?|guard|safe(?:ty)?|hide|hid|hidden|hiding place)\b/gi],
+ ['danger',/\b(?:danger(?:s|ous)?|peril(?:s|ous)?|snare(?:s)?|trap|enemy|enemies|adversar(?:y|ies)|tempt(?:ed|ation|ations)?|trouble(?:s|d)?)\b/gi],
+ ['journey',/\b(?:journey(?:s|ed|ing)?|pilgrim(?:s|age)?|stranger(?:s)?|sojourn(?:ed|eth|ing|er|ers)?|depart(?:ed|eth|ing)?|went|go(?:eth|ing)?|came|come(?:th)?|pass(?:ed|eth)?|return(?:ed|eth)?|led|follow(?:ed|eth|ing)?)\b/gi],
+ ['rest',/\b(?:rest(?:ed|eth|ing)?|sabbath(?:s)?|sleep(?:eth|ing)?|slept|slumber|ease)\b/gi],
+ ['labor',/\b(?:labo(?:u)?r(?:ed|eth|ing|ers)?|work(?:s|ed|eth|ing)?|wrought|toil|made|make(?:th)?|build(?:ed|eth|ing)?|built|till(?:ed)?|husbandman|craft(?:sman|smen)?)\b/gi],
+ ['harvest',/\b(?:harvest|reap(?:ed|eth|ing|er|ers)?|sow(?:ed|eth|ing)?|sown|corn|wheat|barley|thresh(?:ing)?|firstfruits|fruit(?:s|ful)?)\b/gi],
+ ['growth',/\b(?:grow(?:eth|ing)?|grew|grown|increase(?:d|th)?|plant(?:ed|eth|ing)?|seed(?:s)?|root(?:s|ed)?|branch(?:es)?|vine(?:s)?|tree(?:s)?|grass|herb(?:s)?)\b/gi],
+ ['time',/\b(?:time(?:s)?|season(?:s)?|day(?:s)?|year(?:s)?|month(?:s)?|hour(?:s)?|morning|evening|beginning|end|eternal|everlasting|for ever|yesterday|to day|tomorrow|morrow)\b/gi],
+ ['memory',/\b(?:remember(?:ed|eth)?|remembrance|memorial|forget|forgot(?:ten)?|of old|aforetime|formerly|it is written)\b/gi],
+ ['inheritance',/\b(?:inherit(?:ed|ance)?|heir(?:s)?|heritage|portion|birthright|possession(?:s)?)\b/gi],
+ ['family',/\b(?:famil(?:y|ies)|father(?:s)?|mother(?:s)?|son(?:s)?|daughter(?:s)?|child(?:ren)?|wife|wives|husband(?:s)?|brother(?:s)?|brethren|sister(?:s)?|begat|begotten|born|bare|generations?|household(?:s)?|kinsm(?:an|en))\b/gi],
+ ['authority',/\b(?:authorit(?:y|ies)|dominion|rule(?:d|th)?|ruler(?:s)?|reign(?:ed|eth|ing)?|king(?:s|dom|doms)?|queen|prince(?:s)?|govern(?:or|ors|ment)|master(?:s)?|lord(?:s)?|throne(?:s)?|subject|subjection)\b/gi],
+ ['battle',/\b(?:battl(?:e|es)|war(?:s|fare)?|fight(?:ing)?|fought|arm(?:y|ies)|soldier(?:s)?|sword(?:s)?|spear(?:s)?|bows|bow of steel|bow and arrow|arrows|smote|smite|victory|conquer(?:ed|or|ors)?)\b/gi],
+ ['sickness',/\b(?:sick(?:ness)?|disease(?:s|d)?|plague(?:s)?|lepr(?:osy|ous)|leper(?:s)?|blind(?:ness)?|lame|palsy|issue of blood|fever)\b/gi],
+ ['healing',/\b(?:heal(?:ed|eth|ing)?|(?:made|make|be|is|was|art|were) whole|recover(?:ed)?|cure(?:d)?|medicine|physician(?:s)?|restore(?:d|th)?)\b/gi],
+ ['hospitality',/\b(?:hospitality|guest(?:s)?|lodge(?:d)?|lodging|inn|entertain(?:ed)?|receive(?:d|th)?|welcome|salut(?:e|ation|ations)|greet(?:ing)?)\b/gi],
+ ['word',/\b(?:word(?:s)?|scripture(?:s)?|book(?:s)?|writ(?:e|ten|eth|ing)|wrote|read(?:ing)?|scroll|epistle(?:s)?|letter(?:s)?|gospel|testimony|witness(?:es)?)\b/gi],
+ ['knowledge',/\b(?:know(?:eth|ing|ledge|n)?|knew|learn(?:ed|ing)?|perceiv(?:e|ed|eth)|discern(?:ed|ing|ment)?|reveal(?:ed)?|revelation|mystery|mysteries)\b/gi],
+ ['name',/\b(?:name(?:s|d)?|call(?:ed|eth)?|renown|surname(?:d)?)\b/gi],
+ ['lament',/\b(?:lament(?:ed|ation|ations)?|alas|how long|woe is me|cry(?:ing)?|cried|cries|groan(?:ed|ing|ings)?)\b/gi],
+ ['watchfulness',/\b(?:watch(?:ed|eth|ing|man|men)?|wake|awake(?:n)?|awoke|vigilant|sober|behold|look(?:ed|eth|ing)?|saw|see(?:th)?|seen|beheld)\b/gi],
+ ['creation',/\b(?:creat(?:e|ed|or|ion)|made the (?:heaven|earth)|heaven(?:s)?|earth|world|formed|firmament|creature(?:s)?|breath|dust|sea(?:s)?|river(?:s)?|mountain(?:s)?|hill(?:s)?|beast(?:s)?|fowl(?:s)?)\b/gi]
+];
+function compositionClauses(book,ch,v,text,mode){
+ const clauses=[],re=/[^,;:.!?]+(?:[,;:.!?]+|$)|[,;:.!?]+/g;let match;
+ while((match=re.exec(text))){const raw=match[0],leading=raw.length-raw.trimStart().length,phrase=raw.trim();if(!phrase)continue;const offset=match.index+leading;clauses.push({id:'clause:'+clauses.length,phrase,offset,end:offset+phrase.length,evidence:[sceneEvidence(book,ch,v,phrase,offset)],assertion:compositionAssertion(text,offset,phrase,mode)});}
+ return clauses;
+}
+function compositionAssertion(text,offset,phrase,mode){
+ const original=sceneAssertion(text,offset,phrase,mode);
+ // Keep negation visible on concepts whose qualifiers lie inside a phrase.
+ // Fear no evil denies fearing evil, rather than introducing a live threat.
+ if(/\bfear no evil\b/i.test(phrase))return 'negated';
+ const begin=Math.max(text.lastIndexOf(';',offset-1),text.lastIndexOf(':',offset-1),text.lastIndexOf('.',offset-1),text.lastIndexOf('!',offset-1),text.lastIndexOf('?',offset-1))+1;
+ const scope=text.slice(begin,offset),tail=text.slice(offset+phrase.length).split(/[,;:.!?]/,1)[0];
+ // This explicit gift construction governs its following concept. Match its
+ // words exactly rather than extending a loose negation window across clauses.
+ if(/\bnot\s+given\s+(?:us|you|them|me|thee)\s+the\s+spirit\s+of\s*$/i.test(scope))return 'negated';
+ if(/\b(?:not|never|neither|nor)\b(?:\s+\w+){0,4}\s*$/i.test(scope)||/^\s+(?:not|never)\b/i.test(tail))return 'negated';
+ if(/\b(?:if|unless|except|lest)\b/i.test(scope))return 'conditional';
+ if(mode==='law'&&(/\b(?:be ye|thou shalt|ye shall|shall|shalt|command(?:ed)?)\b/i.test(scope+phrase)||original==='instruction'))return 'instruction';
+ return original;
+}
+function compositionRelations(book,ch,v,text,mode){
+ const relations=[],invalid=new Set(['And','The','Now','These','This','That','Which','After','For','Of','He','His','Him','Himself','She','Her','Hers','Herself','It','Its','Itself','Thou','Thy','Thee','Thine','Thyself','They','Their','Them','Theirs','Themselves','We','Our','Ours','Us','Ourselves','Ye','You','Your','Yours','Yourself','Yourselves','Who','Whom','Whose','What','God','LORD','Lord','Almighty','Christ','Jesus']);
+ const names=part=>[...part.matchAll(/\b[A-Z][a-z]+(?:-[A-Z]?[a-z]+)*\b/g)].filter(m=>!invalid.has(m[0]));
+ const endpoint=(name,offset)=>({name,evidence:[sceneEvidence(book,ch,v,name,offset)]});
+ function add(parent,po,child,co,phrase,offset){if(!parent||!child||invalid.has(parent)||invalid.has(child)||parent===child)return;relations.push({type:'parent-child',from:endpoint(parent,po),to:endpoint(child,co),label:parent+' → '+child,evidence:[sceneEvidence(book,ch,v,phrase,offset)],basis:'exact',assertion:compositionAssertion(text,offset,phrase,mode),illustrative:true});}
+ let hit;const begat=/\bbegat\b/gi;
+ while((hit=begat.exec(text))){const previous=text.slice(0,hit.index),prior=names(previous).pop();if(!prior)continue;
+  // An explicit named subject may directly beget, or live a stated span and
+  // then beget. A nearby name before another subject/report is insufficient.
+  const subjectTail=previous.slice(prior.index+prior[0].length);
+  if(!/^\s*(?:(?:lived|was)\s+(?:(?:an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|and|years?|old)\b[\s,]*)+and\s+)?$/i.test(subjectTail))continue;
+  const start=prior.index,tail=text.slice(hit.index+hit[0].length),direct=/^\s+(?:(?:(?:one|two|three|four|five|six|seven|eight|nine|ten)\s+)?(?:sons|daughters),\s*)?([A-Z][a-z]+(?:-[A-Z]?[a-z]+)*)\b/.exec(tail);
+  if(direct){let co=hit.index+hit[0].length+direct[0].lastIndexOf(direct[1]),end=co+direct[1].length;add(prior[0],start,direct[1],co,text.slice(start,end),start);
+   // Coordination directly governed by "begat" is explicit family evidence.
+   // Stop before modifiers, "of Thamar", a new predicate, or another clause.
+   let next;while((next=/^(?:\s*,\s*(?:and\s+)?|\s+and\s+)([A-Z][a-z]+(?:-[A-Z]?[a-z]+)*)\b/.exec(text.slice(end)))){if(/^\s+begat\b/i.test(text.slice(end+next[0].length)))break;co=end+next[0].lastIndexOf(next[1]);end=co+next[1].length;add(prior[0],start,next[1],co,text.slice(start,end),start);}
+  }
+  else if(/^\s+(?:a son|sons|a daughter)\b/i.test(tail)){const named=/\b(?:called|calling)\s+(?:his|her)\s+name\s+([A-Z][a-z]+(?:-[A-Z]?[a-z]+)*)\b/.exec(tail);if(named){const co=hit.index+hit[0].length+named.index+named[0].lastIndexOf(named[1]);add(prior[0],start,named[1],co,text.slice(start,co+named[1].length),start);}}
+ }
+ // Both endpoints must be named in this verse. "Which was the son of" alone
+ // does not establish the unnamed child, and plain name lists create no edges.
+ // A modifier's final capitalized word is not a named subject: for example,
+ // "Jesus of Nazareth, the son of Joseph" must never become Nazareth's ancestry.
+ const son=/\b([A-Z][a-z]+(?:-[A-Z]?[a-z]+)*),?\s+(?:(?:was|is|being)\s+)?(?:the\s+)?(?:son|daughter)\s+of\s+([A-Z][a-z]+(?:-[A-Z]?[a-z]+)*)\b/g;
+ while((hit=son.exec(text))){if(/\b\w+(?:-[\w]+)*\s+(?:of|from|in|at)\s+$/i.test(text.slice(0,hit.index)))continue;const po=hit.index+hit[0].lastIndexOf(hit[2]);add(hit[2],po,hit[1],hit.index,hit[0],hit.index);}
+ return relations;
+}
+function composeVerseMeaning(book,ch,v,text,mode,actors,props,features,actions){
+ text=String(text);ch=Number(ch);v=Number(v);
+ const clauses=compositionClauses(book,ch,v,text,mode),motifs=[],groups=new Map();
+ function mention(type,phrase,offset){const assertion=compositionAssertion(text,offset,phrase,mode),key=type+'|'+assertion,evidence=sceneEvidence(book,ch,v,phrase,offset),existing=groups.get(key);if(existing){if(!existing.evidence.some(e=>e.offset===offset&&e.phrase===phrase))existing.evidence.push(evidence);}else{const motif={type,label:phrase,evidence:[evidence],basis:'exact',assertion,illustrative:true};groups.set(key,motif);motifs.push(motif);}}
+ for(const [type,re] of compositionLexicon){re.lastIndex=0;let hit;while((hit=re.exec(text)))mention(type,hit[0],hit.index);}
+ // A named family register remains a register rather than an assembled cast.
+ if(mode==='genealogy'){const skip=new Set(['And','The','Now','These','This','Which','After','He','His','For','Of','God','LORD','Lord']);for(const match of text.matchAll(/\b[A-Z][a-z]+(?:-[A-Z]?[a-z]+)*\b/g))if(!skip.has(match[0]))mention('name',match[0],match.index);}
+ return {kind:compositionKinds[mode]||'source-chamber',motifs,clauses,relations:compositionRelations(book,ch,v,text,mode),interpretive:true,method:'Exact source phrases, complete source clauses and explicitly named relations; conceptual illustrations are not exhaustive semantic or historical reconstruction.'};
 }
 
 // Lazy verse blueprints. Exact text stays in the source Bible; imagery stays traceable.
@@ -57519,10 +58104,50 @@ const OBJECT_TERMS=[
  ['scales',/\b(?:balances?|weights?|weighed|scales)\b/i],['coin',/\b(?:pence|penny|mites?|piece of money)\b/i],['material',/\b(?:silver|gold|brass|iron|wood|timber)\b/i],['money-reference',/\b(?:money|shekels?|talents?)\b/i],['bread',/\b(?:bread|loaves|loaf|manna)\b/i],['cup',/\bcups?\b/i],['table',/\b(?:table|tables)\b/i],['mill',/\b(?:millstones?|mill|grind|grinding)\b/i],
  ['tomb',/\b(?:tombs?|sepulchres?|grave|graves|burial|buryingplace)\b/i],['stone',/\b(?:stones?|rocks?)\b/i],['bones',/\bbones?\b/i],['fire',/\b(?:fire|flame|flames|furnace|burning)\b/i],['water',/\b(?:waters?|rivers?|fountain|fountains|well|wells|sea|seas|lake|lakes|brook|brooks)\b/i],
  ['sun',/\bsun\b/i],['moon',/\bmoon\b/i],['stars',/\bstars?\b/i],['rainbow',/\b(?:rainbow|bow in the cloud)\b/i],['ladder',/\blad(?:der|ders)\b/i],['cloth',/\b(?:curtains?|linen|garments?|robes?|veil|veils|coats?)\b/i],['plough',/\b(?:plough|plow|plowshares|ploughshares)\b/i],['mountain',/\b(?:mountains?|hills?|mount sinai|mount horeb)\b/i],
+ // Additional tangible nouns verified against the unchanged KJV source. Keep
+ // these separate from the established terms; no new term implies a human actor.
+ ['oven',/\bovens?\b/i],['kneading-trough',/\bkneadingtroughs?\b/i],['sack',/\bsacks?\b/i],
+ ['door',/\bdoors?\b/i],['window',/\bwindows?\b/i],['lattice',/\blattice\b/i],['stocks',/\bstocks\b/i],
+ ['key',/\bkeys?\b/i],['lock',/\blocks?\b/i],['needle',/\bneedles?\b/i],['awl',/\bauls?\b/i],
+ ['honeycomb',/\bhoneycombs?\b/i],['salt',/\bsalt\b(?!\s+sea\b)/i],['chest',/\bchests?\b/i],
+ ['hammer',/\bhammers?\b/i],['axe',/\b(?:axes|axe)\b/i],['saw',/\bsaws?\b/i],['mattock',/\bmattocks?\b/i],
+ ['sickle',/\bsickles?\b/i],['shovel',/\bshovels?\b/i],['tongs',/\btongs\b/i],['caldron',/\b(?:caldrons?|kettles?)\b/i],
+ ['frying-pan',/\bfryingpan\b/i],['dish',/\b(?:dish|dishes)\b/i],['spoon',/\bspoons?\b/i],
+ ['flesh-hook',/\bfleshhooks?\b/i],['snuffers',/\bsnuffers\b/i],['snuff-dish',/\bsnuffdishes\b/i],
+ ['cart',/\bcarts?\b/i],['wagon',/\bwagons?\b/i],['leopard',/\bleopards?\b/i],['fox',/\b(?:fox|foxes)\b/i],
+ ['swine',/\bswine\b/i],['ostrich',/\b(?:ostrich|ostriches)\b/i],['whale',/\bwhales?\b/i],
+ ['flour',/\bflour\b/i],['oil',/\boil\b/i],['honey',/\bhoney\b/i],['egg',/\beggs?\b/i],
+ ['cucumber',/\bcucumbers?\b/i],['melon',/\bmelons?\b/i],['leek',/\bleeks?\b/i],['onion',/\bonions?\b/i],
+ ['garlic',/\bgarlick\b/i],['lentil',/\blentiles\b/i],['almond',/\balmonds?\b/i],['nut',/\bnuts?\b/i],
+ ['cinnamon',/\bcinnamon\b/i],['mandrake',/\bmandrakes?\b/i],['battering-ram',/\bbattering rams?\b/i],
+ ['anvil',/\banvil\b/i],['bell',/\bbells?\b/i],['nail',/\bnails?\b/i],['hook',/\bhooks?\b/i],
+ ['pen',/\bpens?\b/i],['inkhorn',/\binkhorn\b/i],['scrip',/\bscrip\b/i],
  ['bed',/\b(?:beds?|couches?|bedstead)\b/i],['basin',/\b(?:basins?|basons?)\b/i],['towel',/\btowels?\b/i],['bowl',/\b(?:bowls?|vials?)\b/i],['rope',/\b(?:ropes?|cords?)\b/i],['anchor',/\banchors?\b/i],['sail',/\bsails?\b/i],['yoke',/\byokes?\b/i],['knife',/\b(?:knife|knives)\b/i],['helmet',/\bhelmets?\b/i],['shoes',/\b(?:shoes?|sandals?)\b/i],['fruit',/\bfruits?\b/i],['pomegranate',/\bpomegranates?\b/i],['apple',/\bapples?\b/i],['locust',/\blocusts?\b/i],['frog',/\bfrogs?\b/i],['fly',/\bflies\b/i],['dog',/\bdogs?\b/i],['wolf',/\b(?:wolf|wolves)\b/i],['bear',/\bbears?\b/i],['swarm',/\b(?:swarm|swarms|bees)\b/i],['seal',/\bseals?\b/i],['loom',/\b(?:loom|weaver|weavers|shuttle)\b/i],['press',/\b(?:winepress|winepresses|pressfat|oil press)\b/i]
 ];
+function expandedTangibleMention(text,type,hit){
+ const before=text.slice(0,hit.index),after=text.slice(hit.index+hit[0].length);
+ if(type==='saw'&&/^saw$/i.test(hit[0])&&!/\b(?:a|an|the)\s+$/i.test(before))return false;
+ if(type==='lock'&&(/^\s+of\s+(?:mine|my|his|her|thy|the)\s+(?:head|hair)\b/i.test(after)||/^locks$/i.test(hit[0])&&!/\b(?:doors?|gates?)\b/i.test(text)))return false;
+ if(type==='nail'&&(/\b(?:pare\s+(?:her|his|their)|his|her|thy|your|their|my)\s+$/i.test(before)||/^\s+(?:like\s+birds'\s+claws|of\s+brass)\b/i.test(after)))return false;
+ if(type==='stocks'){
+  const local=before.split(/[.;:!?]/).pop()+hit[0]+after.split(/[.;:!?]/)[0];
+  if(!/\b(?:feet|prison|correction)\b|\b(?:put him in|brought forth[^.;]*out of)\s+the stocks\b/i.test(local))return false;
+ }
+ // Heavenly windows and abstract doors are imagery rather than tangible source
+ // architecture. The complete wording remains in reading/composition evidence.
+ if(type==='window'&&/^\s+of\s+heaven\b/i.test(after))return false;
+ if(type==='door'&&/^\s+of\s+(?:faith|utterance|hope)\b/i.test(after))return false;
+ if(type==='salt'&&(/\b(?:city|valley|vale)\s+of\s+$/i.test(before)||/^\s+(?:sea|land|water)\b/i.test(after)))return false;
+ return true;
+}
 function extractObjects(text,book,ch){
- const out=[];for(const [type,re] of OBJECT_TERMS){const hit=re.exec(text);if(hit){if(type==='water'&&/^well$/i.test(hit[0])&&!/\b(?:the|a|of|at|into|by|from)\s+(?:the\s+)?well\b|\bwell\s+(?:of|was|is|where|which|there|spring)/i.test(text))continue;if(type==='bear'&&/^bear$/i.test(hit[0])&&!/\b(?:a|the|with|of|as|she)\s+bear\b|\bbear\s+(?:and|which|that)/i.test(text))continue;out.push({type,phrase:hit[0],offset:hit.index});}}
+ const out=[];for(const [type,re] of OBJECT_TERMS){let hit=re.exec(text);
+  // If an ambiguous early occurrence is rejected, a later real noun can still
+  // supply the one representative reference for this type.
+  if(hit&&['saw','lock','nail','stocks','window','door','salt'].includes(type)){
+   hit=null;for(const candidate of text.matchAll(new RegExp(re.source,'gi')))if(expandedTangibleMention(text,type,candidate)){hit=candidate;break;}
+  }
+  if(hit){if(type==='water'&&/^well$/i.test(hit[0])&&!/\b(?:the|a|of|at|into|by|from)\s+(?:the\s+)?well\b|\bwell\s+(?:of|was|is|where|which|there|spring)/i.test(text))continue;if(type==='bear'&&/^bear$/i.test(hit[0])&&!/\b(?:a|the|with|of|as|she)\s+bear\b|\bbear\s+(?:and|which|that)/i.test(text))continue;out.push({type,phrase:hit[0],offset:hit.index});}}
  const ark=/\bark\b/i.exec(text);if(ark){const type=book==='Exodus'&&ch===2?'basket':book==='Genesis'&&ch>=6&&ch<=9?'noah_ark':'covenant_ark';if(!out.some(o=>o.type===type))out.push({type,phrase:ark[0],offset:ark.index});}
  // A lion/horse/kingdom in poetry or prophecy is a visual reference, not a factual reenactment.
  return out.sort((a,b)=>a.offset-b.offset||a.type.localeCompare(b.type));
@@ -58146,7 +58771,7 @@ function inspectAt(x,y){if(!state.walkMode)return false;const id=renderer.pick(x
 function pickScene(x,y){if(state.walkMode)return inspectAt(x,y);const id=renderer.pick(x,y);if(id>=2000&&id<2066)selectBook(BOOKS[id-2000]);else if(id>=100000){const n=activeScene?.detailNodes?.find(n=>n.id===id);if(n)activateDetail(n)}else if(model.byId[id]){const b=model.byId[id];openChapter(b.book,b.chapter)}}
 function openRecordScene(kind,id){const r=storyIndex.get(kind,id);if(!r)return;const loc=storyIndex.refs[r.refs[0]]||{book:state.book,chapter:state.chapter,verse:null};openChapter(loc.book,loc.chapter,loc.verse,'chapter',{kind,id})}
 function focusRecord(){if(!state.focusRecord||!activeScene)return false;const nodes=activeScene.detailNodes.filter(n=>n.kind===state.focusRecord.kind&&n.recordId===state.focusRecord.id);if(!nodes.length)return false;window.__hold=0;const n=nodes[0];if(n.kind==='routes'){renderer.move({target:[nodes.reduce((s,n)=>s+n.x,0)/nodes.length,n.y,nodes.reduce((s,n)=>s+n.z,0)/nodes.length],dist:85,pitch:.8})}else renderer.move({target:[n.x,n.y-1,n.z],dist:n.kind==='places'?13:9,yaw:.35,pitch:.38});return true}
-function activateDetail(n){if(n.kind==='verses'){openChapter(state.book,state.chapter,n.verse);return}if(n.location){openChapter(n.location.book,n.location.chapter,n.location.verse);return}showRecord(n.kind,n.recordId)}
+function activateDetail(n){if(n.kind==='illustration'){activateCompositionLabel(n);return}if(n.kind==='verses'){openChapter(state.book,state.chapter,n.verse);return}if(n.location){openChapter(n.location.book,n.location.chapter,n.location.verse);return}showRecord(n.kind,n.recordId)}
 
 let crossrefIndex=null,crossrefPage=40,crossrefToken=0;
 function resetCrossrefs(){crossrefToken++;crossrefPage=40;$('crossref-results').replaceChildren();$('crossref-status').textContent='';$('crossref-more').hidden=true;$('load-crossrefs').hidden=false;$('load-crossrefs').disabled=false;}
@@ -58176,7 +58801,7 @@ function renderSourceInventory(){
  renderPassageEvidence(root,d.scene.selectedPlans||[]);
  const details=create('details','object-inventory'),summary=create('summary','',`Matched source terms (${d.scene.visualObjectCount})`);details.appendChild(summary);
  for(const v of data){const block=create('div','source-verse-card'),b=create('button','reference-button',v.reference);b.onclick=()=>openChapter(state.book,state.chapter,v.verse);block.appendChild(b);
-  if(!v.objects.length)block.appendChild(create('p','metadata','Reading stop. No literal object term was matched in this verse.'));
+  if(!v.objects.length)block.appendChild(create('p','metadata','This verse uses its source composition and genre environment. No tangible object term was matched.'));
   for(const o of v.objects){const p=create('p','source-object');p.append(create('strong','',o.type.replace(/_/g,' ')+' '),document.createTextNode('— “'+o.phrase+'”'));block.appendChild(p)}details.appendChild(block);
  }
  root.appendChild(details);
@@ -58187,7 +58812,7 @@ function renderPassageEvidence(root,plans){
  for(const plan of plans){
   const card=create('details','passage-scene-card');card.dataset.sceneId=plan.id;card.dataset.reference=plan.reference;card.dataset.mode=plan.mode;
   if(plans.length===1)card.open=true;const summary=create('summary','',plan.reference+' · '+(plan.title||'Source scene'));card.append(summary);
-  const kinds={narrative:'Narrative',parable:'Parable',law:'Law and instructions',poetry:'Poetry',wisdom:'Wisdom',prophecy:'Prophecy',vision:'Vision',discourse:'Discourse',genealogy:'Genealogy',letter:'Letter',reading:'Reading'};
+  const kinds={narrative:'Narrative',recollection:'Recollection',parable:'Parable',law:'Law and instructions',poetry:'Poetry',wisdom:'Wisdom',prophecy:'Prophecy',vision:'Vision',discourse:'Discourse',genealogy:'Genealogy',letter:'Letter',reading:'Reading'};
   card.append(create('p','scene-mode',(kinds[plan.mode]||plan.mode)+' · '+(plan.authored?'Passage-specific scene':'Source-linked scene')));
   if(plan.notes)card.append(create('p','metadata',Array.isArray(plan.notes)?plan.notes.join(' '):plan.notes));
   const evidence=(item,label)=>{const row=create('div','scene-evidence-row');row.dataset.componentType=item.type||'actor';row.dataset.sourceCount=String(item.count||1);row.dataset.basis=item.basis||'exact';row.append(create('strong','',label));
@@ -58195,13 +58820,40 @@ function renderPassageEvidence(root,plans){
    if(item.basis==='context')row.append(create('small','source-context','From the surrounding passage'));card.append(row);
   };
   for(const a of plan.actors||[])evidence(a,a.name+' · '+(a.attendance==='reference'?'name reference':a.pose||'standing'));
-  for(const p of plan.props||[]){const qty=p.countBasis==='source'||plan.authored&&p.count>1?' × '+p.count:'',type=p.type.replace(/[-_]/g,' ');evidence(p,type+qty);}
+  for(const p of [...(plan.props||[]),...(plan.supplementaryProps||[])]){const qty=p.countBasis==='source'||plan.authored&&p.count>1?' × '+p.count:'',type=p.type.replace(/[-_]/g,' ');evidence(p,type+qty+(p.sourceSupplement?' · additional source object':''));}
   for(const f of plan.features||[])evidence(f,f.type.replace(/[-_]/g,' ')+(f.state&&f.state!=='source-reference'?' · '+f.state.replace(/[-_]/g,' '):''));
+  renderCompositionEvidence(card,plan);
   const actions=(plan.actions||[]).filter(a=>a.currentEvent||plan.mode!=='narrative');if(actions.length){const p=create('p','scene-actions');p.append(create('strong','','Source actions: '),document.createTextNode(actions.map(a=>a.phrase+(a.assertion!=='asserted'?' ('+a.assertion+')':'')).join(' · ')));card.append(p);}
   const rest=create('details','reading-details');rest.append(create('summary','','Read the complete verse'));const source=sourceTextForPlan(plan);if(source)rest.append(create('p','source-reading',source));
   if(plan.unmodeled?.length)rest.append(create('p','metadata',plan.unmodeled[0].reason));card.append(rest);box.append(card);
  }
  root.append(box);
+}
+function renderCompositionEvidence(card,plan){
+ const composition=plan.visualization;if(!composition)return;
+ const names={'narrative-extension':'Narrative source gallery','teaching-exhibit':'Teaching pavilion','poetic-landscape':'Poetry garden','family-register':'Family register','letter-chamber':'Letter chamber','law-workshop':'Law workshop','vision-chamber':'Vision chamber','prophecy-chamber':'Prophecy chamber','source-chamber':'Source chamber'};
+ const section=create('section','composition-evidence');section.dataset.compositionKind=composition.kind;
+ section.append(create('h4','',names[composition.kind]||'Source composition'),create('p','metadata','The carved illustrations explain source language. Their arrangements are modern interpretations; the complete verse is inscribed on the enlarged stage.'));
+ const sourceButton=e=>{const b=create('button','evidence-reference',e.reference||plan.reference);b.type='button';b.onclick=()=>openChapter(plan.book,plan.chapter,e.verse||plan.verse);return b;};
+ for(const motif of composition.motifs||[]){
+  const row=create('div','scene-evidence-row composition-motif');row.dataset.concept=motif.type;row.dataset.assertion=motif.assertion;row.dataset.illustrative='true';
+  row.append(create('strong','',(motif.label||motif.type.replace(/[-_]/g,' '))+' · carved illustration'+(motif.assertion!=='asserted'?' · '+motif.assertion:'')));
+  for(const e of motif.evidence||[])row.append(sourceButton(e),create('span','source-phrase','“'+e.phrase+'”'));section.append(row);
+ }
+ for(const [i,relation] of (composition.relations||[]).entries()){
+  const row=create('div','scene-evidence-row composition-relation'),from=typeof relation.from==='object'?relation.from.name:relation.from,to=typeof relation.to==='object'?relation.to.name:relation.to;
+  row.dataset.concept='relation:'+i;
+  row.append(create('strong','',from+' → '+to+' · '+(relation.label||relation.type).replace(/[-_]/g,' ')));
+  for(const e of relation.evidence||[])row.append(sourceButton(e),create('span','source-phrase','“'+e.phrase+'”'));section.append(row);
+ }
+ const clauses=create('details','composition-clauses');clauses.append(create('summary','',`Exact source clauses (${composition.clauses.length})`));
+ for(const clause of composition.clauses){const row=create('div','scene-evidence-row');row.dataset.clauseId=clause.id;row.dataset.offset=clause.offset;row.append(create('span','source-phrase',clause.phrase));for(const e of clause.evidence||[])row.append(sourceButton(e));clauses.append(row);}
+ section.append(clauses);card.append(section);
+}
+function activateCompositionLabel(node){
+ if(state.mode!=='chapter'||state.book!==node.book||Number(state.chapter)!==Number(node.chapter)||Number(state.verse)!==Number(node.verse)){openChapter(node.book,node.chapter,node.verse);return;}
+ const row=Array.from(document.querySelectorAll('.composition-motif,.composition-relation')).find(e=>e.dataset.concept===node.concept);
+ if(row){$('story-source').open=true;row.closest('.passage-scene-card').open=true;row.scrollIntoView({block:'nearest',behavior:'auto'});row.classList.add('composition-focus');setTimeout(()=>row.classList.remove('composition-focus'),2400);}
 }
 function sourceTextForPlan(plan){const match=/^(.*) (\d+):(\d+)$/.exec(plan.reference||'');return match?BIBLE[match[1]]?.[match[2]]?.[match[3]]||'':'';}
 function syncPassageHeading(){
