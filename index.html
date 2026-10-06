@@ -60599,6 +60599,7 @@ function readingMarker(){
 function syncReadingMarker(){if(!renderer||!activeScene||activeSceneKey!==sceneKey())return;const n=readingMarker();renderer.setHighlight(n?CityGeometry.selected({x:n.x,y:n.markerFloor??n.y-(n.chapterMarker?0:1),z:n.z,w:n.chapterMarker?n.w||2:1.8}):new Float32Array());renderer.request();}
 function focusReadingMarker(){
  if(!readingProgress.follow||state.walkMode||!state.ready||activeSceneKey!==sceneKey())return false;
+ if(state.mode==='chapter'&&state.moment==='verse:'+state.verse&&activeScene?.momentId===state.moment&&activeScene.focus){window.__hold=0;renderer.move(activeScene.focus);return true;}
  const n=readingMarker();if(!n)return false;window.__hold=0;renderer.move({target:[n.x,n.y-(n.chapterMarker?0:.8),n.z],dist:n.bookMarker?72:n.chapterMarker?Math.max(18,(n.w||3)*4):n.exhibitMarker?n.cameraDist||18:10,pitch:n.chapterMarker?.76:.67});return true;
 }
 function selectReadingVerse(verse,deliberate=false){
